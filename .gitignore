@@ -31,10 +31,13 @@ app/.dart_tool/
 app/.flutter-plugins
 app/.flutter-plugins-dependencies
 app/.packages
-app/pubspec.lock
 build/
 .dart_tool/
 .packages
+
+# pubspec.lock IS committed for an application: it pins the exact dependency
+# versions, so a reviewer gets the build we tested rather than the newest
+# compatible release. (It would be ignored for a published library package.)
 
 # Local machine config. Contains an absolute SDK path.
 app/android/local.properties
