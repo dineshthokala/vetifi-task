@@ -1,0 +1,54 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Local databases. These are runtime state, never source.
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Signing keys.
+#
+# server/keys/private.hex IS committed, deliberately, so a reviewer can run the
+# system with one command. Do not let a *production* key reach a repository --
+# this is exactly the leak analysed in DECISIONS.md question 5.
+# server/keys/private.hex
+server/keys/*.key
+server/keys/*.pem
+
+# Flutter / Dart
+app/build/
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/pubspec.lock
+build/
+.dart_tool/
+.packages
+
+# Local machine config. Contains an absolute SDK path.
+app/android/local.properties
+app/android/.gradle/
+app/android/**/GeneratedPluginRegistrant.java
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.tmp
