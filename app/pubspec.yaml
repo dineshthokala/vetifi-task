@@ -1,0 +1,58 @@
+name: vetifitask
+description: "Vetifi - Veterinary Drug Dose Calculator"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Local storage. The dataset lives in SQLite so a signed update can be applied
+  # as a single transaction, which is what makes Part E.2's atomicity guarantee
+  # possible.
+  sqflite: ^2.4.2
+  path: ^1.9.1
+
+  # Dataset sync: Ed25519 verification and SHA-256 digests.
+  ed25519_edwards: ^0.3.2
+  crypto: ^3.0.6
+  convert: ^3.1.2
+  http: ^1.3.0
+
+  # Tells the app when a sync is worth attempting, so a device in airplane mode
+  # does not pay a connection timeout on every cold start.
+  connectivity_plus: ^6.1.4
+
+  # Language preference is the only thing persisted outside SQLite.
+  shared_preferences: ^2.5.3
+
+  # Drug name display. Font files are fetched once and cached; see BREAK_IT.md
+  # for the offline behaviour when that fetch fails.
+  google_fonts: ^6.2.1
+
+  # Calculation log identifiers, used for server-side deduplication.
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+  # Runs the real SQLite engine on the test host so the atomicity tests
+  # exercise the same transaction semantics as the device.
+  sqflite_common_ffi: ^2.3.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # base_dataset_v14.json  - the content team's base version
+    # generated_50k_drugs.json - the Part B search corpus, merged on first launch
+    - assets/data/

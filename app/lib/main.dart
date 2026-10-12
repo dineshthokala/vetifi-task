@@ -1,0 +1,32 @@
+import 'package:flutter/material.dart';
+
+import 'l10n/app_language.dart';
+import 'screens/home_screen.dart';
+import 'theme.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LanguageController.instance.init();
+  runApp(const VetifiApp());
+}
+
+class VetifiApp extends StatelessWidget {
+  const VetifiApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<AppLanguage>(
+      valueListenable: LanguageController.instance.currentLanguage,
+      builder: (context, lang, _) {
+        return MaterialApp(
+          title: lang == AppLanguage.kn
+              ? 'ವೆಟಿಫೈ - ಪಶುವೈದ್ಯಕೀಯ ಡೋಸ್ ಕ್ಯಾಲ್ಕುಲೇಟರ್'
+              : 'Vetifi - Drug Dose Calculator',
+          debugShowCheckedModeBanner: false,
+          theme: VetifiTheme.themeFor(lang),
+          home: const HomeScreen(),
+        );
+      },
+    );
+  }
+}
