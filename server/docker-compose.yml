@@ -1,0 +1,59 @@
+# Vetifi dataset server.
+#
+# `docker compose up --build` is the whole setup:
+#   - PostgreSQL 16 with a health check
+#   - the FastAPI service, which waits for the database and seeds v14 on boot
+#
+# ADMIN_KEY has no default on purpose. The server refuses to start without it,
+# because a hardcoded fallback would mean every deployment that forgot to set it
+# shares a key that is published in this repository -- and this endpoint can
+# change a dose. Override it for a throwaway demo:
+#
+#   ADMIN_KEY=dev docker compose up --build
+#
+# Or export a random one:
+#
+#   export ADMIN_KEY=$(python -c "import secrets;print(secrets.token_urlsafe(32))")
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vetifi
+      POSTGRES_USER: vetifi_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vetifi_local_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vetifi_user -d vetifi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://vetifi_user:${POSTGRES_PASSWORD:-vetifi_local_password}@db:5432/vetifi
+      # Required. The server exits at startup if this is empty.
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY must be set - see the header of this file}
+      # Set to 1 to enable random tampering. See BREAK_IT.md section 2.
+      CHAOS: "${CHAOS:-0}"
+      # Optional. Overrides server/keys/private.hex. Leave unset for the demo.
+      ED25519_PRIVATE_KEY: "${ED25519_PRIVATE_KEY:-}"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
