@@ -98,7 +98,7 @@ class UpdateOutcome {
         return 'The server does not recognise this device\'s dataset '
             'version; a full dataset will be requested.';
       case UpdateStatus.networkError:
-        return 'Could not reach the dataset server. Working offline$suffix.';
+        return 'No network, working offline';
     }
   }
 }
@@ -164,11 +164,34 @@ class UpdateService {
     }
   }
 
+  static Future<void> _ensureServerUrl() async {
+    if (_serverUrl != defaultServerUrl) return;
+    final candidates = [
+      'http://127.0.0.1:8000',
+      'http://10.0.2.2:8000',
+      'http://192.168.1.7:8000',
+    ];
+    for (final base in candidates) {
+      try {
+        final res = await http
+            .get(Uri.parse('$base/health'))
+            .timeout(const Duration(milliseconds: 1500));
+        if (res.statusCode == 200) {
+          _serverUrl = base;
+          return;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+  }
+
   /// Checks the manifest for a newer dataset.
   ///
   /// The manifest is signed with the same key as payloads, and a missing or
   /// invalid signature is a hard failure.
   static Future<UpdateOutcome> checkForUpdate() async {
+    await _ensureServerUrl();
     final currentVersion = await DatabaseService.getDatasetVersion();
 
     http.Response response;
@@ -416,6 +439,7 @@ class UpdateService {
   /// uploaded, so an interrupted upload re-sends rather than silently dropping
   /// records. The server deduplicates on calc_id, so a re-send is harmless.
   static Future<int> uploadCalcLogs() async {
+    await _ensureServerUrl();
     var uploaded = 0;
     // Bound the work per call so a very backlogged device does not hold the
     // sync open indefinitely.

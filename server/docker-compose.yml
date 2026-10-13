@@ -33,12 +33,13 @@ services:
       retries: 10
 
   server:
+    image: vetifitask-server:latest
     build: .
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://vetifi_user:${POSTGRES_PASSWORD:-vetifi_local_password}@db:5432/vetifi
+      DATABASE_URL: postgresql+psycopg2://vetifi_user:${POSTGRES_PASSWORD:-vetifi_local_password}@db:5432/vetifi
       # Optional. If unset, entrypoint.sh generates and persists one.
       ADMIN_KEY: "${ADMIN_KEY:-}"
       # Set to 1 to enable random tampering. See BREAK_IT.md section 2.

@@ -21,12 +21,16 @@ class SyncOutcome {
   /// cases an operator needs to see.
   final bool datasetFailed;
 
+  /// True when offline or server unreachable.
+  final bool isOffline;
+
   final int logsUploaded;
 
   const SyncOutcome({
     required this.datasetChanged,
     required this.datasetMessage,
     required this.datasetFailed,
+    this.isOffline = false,
     this.logsUploaded = 0,
   });
 }
@@ -55,8 +59,9 @@ class SyncService {
     if (!force && !await hasConnection) {
       return const SyncOutcome(
         datasetChanged: false,
-        datasetMessage: 'Offline. Using the dataset stored on this device.',
+        datasetMessage: 'no network, working offline',
         datasetFailed: false,
+        isOffline: true,
       );
     }
 
@@ -68,9 +73,9 @@ class SyncService {
     } catch (_) {
       return const SyncOutcome(
         datasetChanged: false,
-        datasetMessage: 'Could not reach the dataset server. '
-            'Using the dataset stored on this device.',
+        datasetMessage: 'no network, working offline',
         datasetFailed: false,
+        isOffline: true,
       );
     }
 
@@ -88,7 +93,8 @@ class SyncService {
 
     return SyncOutcome(
       datasetChanged: changed,
-      datasetMessage: outcome.message,
+      datasetMessage: outcome.status == UpdateStatus.networkError ? 'no network, working offline' : outcome.message,
+      isOffline: outcome.status == UpdateStatus.networkError,
       datasetFailed: switch (outcome.status) {
         UpdateStatus.manifestRejected ||
         UpdateStatus.payloadRejected ||

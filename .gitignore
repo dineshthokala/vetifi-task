@@ -42,6 +42,7 @@ build/
 # Local machine config. Contains an absolute SDK path.
 app/android/local.properties
 app/android/.gradle/
+app/android/.kotlin/
 app/android/**/GeneratedPluginRegistrant.java
 
 # IDE
