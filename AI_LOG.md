@@ -193,9 +193,11 @@ a 30 ms → 4.7 ms change is more informative than the 4.7 ms.
 
 ## 4. A night-before-submission review pass (13 Oct 2026)
 
-An external gap review (`vetifi-gap-review.md`, kept in the repo) listed
+An external gap review received on 13 Oct 2026 listed
 validator drift, a missing withdraw reason, over-long Part F answers, and an
-undisclosed signing-key gap, among other items. AI agents were used to verify
+undisclosed signing-key gap, among other items. (The review file itself is not
+kept in the repo: it was working notes, and everything substantive in it is
+now code, tests, or one of the sections below.) AI agents were used to verify
 every claim against the code before touching anything: two parallel
 investigations (server-side and app-side) confirmed nearly all of them, and
 refuted one — the claim that the app sends `If-None-Match` (it never does; it
