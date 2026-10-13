@@ -38,6 +38,8 @@ class VetifiTheme {
   static const Color errorBg = Color(0xFFFEF2F2);
   static const Color warning = Color(0xFFD97706);
   static const Color warningBg = Color(0xFFFFFBEB);
+  static const Color offline = Color(0xFFEA580C); // Warm amber-orange for offline
+  static const Color offlineBg = Color(0xFFFFF7ED); // Soft warm orange tint
   static const Color success = Color(0xFF059669);
   static const Color successBg = Color(0xFFF0FDF4);
   static const Color info = Color(0xFF2563EB);
