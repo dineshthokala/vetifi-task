@@ -143,12 +143,12 @@ all. This was a real defect in an earlier revision of this submission.
 ## 3. Tests
 
 ```bash
-cd app     && flutter test          # 128 tests, ~20s
-cd server  && python -m pytest -q   # 68 tests,  ~7s
+cd app     && flutter test          # 135 tests, ~20s
+cd server  && python -m pytest -q   # 78 tests,  ~7s
 ```
 
-`pytest.ini` puts the repository root on `sys.path`, so pytest works from
-either the repository root or from inside `server/`.
+`server/tests/conftest.py` puts the repository root on `sys.path`, so pytest
+works from either the repository root or from inside `server/`.
 
 ```bash
 flutter analyze          # expect: No issues found!

@@ -9,10 +9,17 @@ import first silently won and the other suite failed with 401s.
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
+# Tests import as `server.app.*`, so the repository root must be on sys.path.
+# (This used to live in a root pytest.ini; it moved here so the tests work
+# with no root-level config file.) conftest is imported before any test
+# module, so inserting here covers every run directory.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # A per-run temporary directory, so parallel or repeated runs do not collide and
 # nothing is left in the repository.

@@ -91,8 +91,8 @@ cd app     && flutter test                            # 135 tests
 cd server  && python -m pytest server/tests -q        # 78 tests
 ```
 
-`pytest.ini` puts the repository root on `sys.path`, so pytest works from
-either the root or from inside `server/`.
+`server/tests/conftest.py` puts the repository root on `sys.path`, so pytest
+works from either the root or from inside `server/`.
 
 ---
 
