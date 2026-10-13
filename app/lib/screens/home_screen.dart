@@ -14,7 +14,8 @@ import '../services/database_service.dart';
 import '../services/search_index.dart';
 import '../services/sync_service.dart';
 import '../theme.dart';
-import '../widgets/language_toggle_button.dart';
+// import '../widgets/language_toggle_button.dart';
+import '../widgets/version_badge.dart';
 import 'calculator_screen.dart';
 import 'settings_screen.dart';
 
@@ -174,10 +175,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openCalculator(Drug drug) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CalculatorScreen(
-          drug: drug,
-          datasetVersion: _datasetVersion,
-        ),
+        builder: (_) =>
+            CalculatorScreen(drug: drug, datasetVersion: _datasetVersion),
       ),
     );
   }
@@ -192,74 +191,94 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<AppLanguage>(
-      valueListenable: LanguageController.instance.currentLanguage,
-      builder: (context, currentLang, _) {
-        final strings = AppStrings(currentLang);
+    // Multi-language toggle commented out for now (defaults to English):
+    // return ValueListenableBuilder<AppLanguage>(
+    //   valueListenable: LanguageController.instance.currentLanguage,
+    //   builder: (context, currentLang, _) {
+    const strings = AppStrings(AppLanguage.en);
 
-        return Scaffold(
-          appBar: AppBar(
-            title: Row(
-              children: [
-                const Icon(Icons.pets, size: 24),
-                const SizedBox(width: 10),
-                Text(
-                  strings.appTitle,
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
-                ),
-              ],
+    return Scaffold(
+      appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: VetifiTheme.primaryGradient,
+          ),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.pets, size: 24, color: Colors.white),
+            const SizedBox(width: 10),
+            Text(
+              strings.appTitle,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
-            actions: [
-              const LanguageToggleButton(),
-              if (_datasetVersion.isNotEmpty)
-                _VersionBadge(version: _datasetVersion),
-              IconButton(
-                onPressed: _openSettings,
-                icon: const Icon(Icons.settings_outlined),
-                tooltip: 'Settings and sync',
-              ),
-            ],
+          ],
+        ),
+        actions: [
+          // const LanguageToggleButton(),
+          if (_datasetVersion.isNotEmpty)
+            VersionBadge(
+              version: _datasetVersion,
+              onTap: _openSettings,
+            ),
+          IconButton(
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            tooltip: 'Settings and sync',
           ),
-          body: Column(
-            children: [
-              _SearchBar(
-                controller: _searchController,
-                focusNode: FocusNode(),
-                hintText: strings.searchHint,
-                onChanged: _onSearchChanged,
-                onClear: () {
-                  _searchController.clear();
-                  _onSearchChanged('');
-                },
-              ),
-              if (_stalenessWarning != null)
-                _AdvisoryBanner(
-                  icon: Icons.schedule,
-                  color: VetifiTheme.warning,
-                  background: VetifiTheme.warningBg,
-                  message: _stalenessWarning!,
-                ),
-              if (_syncMessage != null && !_searching)
-                _AdvisoryBanner(
-                  icon: _syncFailed
-                      ? Icons.cloud_off_outlined
-                      : Icons.cloud_done_outlined,
-                  color: _syncFailed ? VetifiTheme.textMuted : VetifiTheme.info,
-                  background:
-                      _syncFailed ? VetifiTheme.background : VetifiTheme.infoBg,
-                  message: _syncMessage!,
-                ),
-              _ResultCount(
-                count: _results.length,
-                searching: _searching,
-                version: _datasetVersion,
-              ),
-              Expanded(child: _buildBody(strings)),
-            ],
+          const SizedBox(width: 4),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(66),
+          child: _SearchBar(
+            controller: _searchController,
+            focusNode: FocusNode(),
+            hintText: strings.searchHint,
+            onChanged: _onSearchChanged,
+            onClear: () {
+              _searchController.clear();
+              _onSearchChanged('');
+            },
           ),
-        );
-      },
+        ),
+      ),
+      body: Column(
+        children: [
+          if (_stalenessWarning != null)
+            _AdvisoryBanner(
+              icon: Icons.schedule,
+              color: VetifiTheme.warning,
+              background: VetifiTheme.warningBg,
+              message: _stalenessWarning!,
+            ),
+          if (_syncMessage != null && !_searching)
+            _AdvisoryBanner(
+              icon: _syncFailed
+                  ? Icons.cloud_off_outlined
+                  : Icons.cloud_done_outlined,
+              color: _syncFailed ? VetifiTheme.textMuted : VetifiTheme.info,
+              background: _syncFailed
+                  ? VetifiTheme.background
+                  : VetifiTheme.infoBg,
+              message: _syncMessage!,
+            ),
+          _ResultCount(
+            count: _results.length,
+            searching: _searching,
+            version: _datasetVersion,
+          ),
+          Expanded(child: _buildBody(strings)),
+        ],
+      ),
     );
+    //   },
+    // );
   }
 
   Widget _buildBody(AppStrings strings) {
@@ -288,33 +307,6 @@ class _HomeScreenState extends State<HomeScreen> {
 // Supporting widgets
 // ---------------------------------------------------------------------------
 
-class _VersionBadge extends StatelessWidget {
-  final String version;
-  const _VersionBadge({required this.version});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: Text(
-          version,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Colors.white.withValues(alpha: 0.9),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -332,9 +324,8 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: VetifiTheme.primary,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: TextField(
         controller: controller,
         focusNode: focusNode,
@@ -396,7 +387,11 @@ class _AdvisoryBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.inter(fontSize: 12.5, color: color, height: 1.35),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12.5,
+                color: color,
+                height: 1.35,
+              ),
             ),
           ),
         ],
@@ -423,9 +418,7 @@ class _ResultCount extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            searching
-                ? 'Searching...'
-                : '$count drug${count == 1 ? '' : 's'}',
+            searching ? 'Searching...' : '$count drug${count == 1 ? '' : 's'}',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(width: 8),
@@ -443,9 +436,9 @@ class _ResultCount extends StatelessWidget {
             Text(
               'Dataset $version',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: VetifiTheme.textMuted,
-                    fontSize: 12,
-                  ),
+                color: VetifiTheme.textMuted,
+                fontSize: 12,
+              ),
             ),
         ],
       ),
@@ -473,10 +466,9 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               hasQuery ? 'No matching drugs' : 'Search for a drug',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(color: VetifiTheme.textMuted),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: VetifiTheme.textMuted),
             ),
             const SizedBox(height: 6),
             Text(
@@ -484,10 +476,9 @@ class _EmptyState extends StatelessWidget {
                   ? 'Check the spelling, or try a shorter fragment of the name.'
                   : 'Type at least two letters to search.',
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: VetifiTheme.textMuted),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: VetifiTheme.textMuted),
             ),
           ],
         ),
@@ -517,15 +508,15 @@ class _DrugListItem extends StatelessWidget {
     final accent = drug.isWithdrawn
         ? VetifiTheme.error
         : hasIssue
-            ? VetifiTheme.warning
-            : VetifiTheme.primary;
+        ? VetifiTheme.warning
+        : VetifiTheme.primary;
 
     return Card(
       color: drug.isWithdrawn
           ? VetifiTheme.withdrawnBg
           : hasIssue
-              ? VetifiTheme.warningBg
-              : null,
+          ? VetifiTheme.warningBg
+          : null,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -545,8 +536,8 @@ class _DrugListItem extends StatelessWidget {
                   drug.isWithdrawn
                       ? Icons.block
                       : hasIssue
-                          ? Icons.warning_amber_rounded
-                          : Icons.medication,
+                      ? Icons.warning_amber_rounded
+                      : Icons.medication,
                   color: accent,
                   size: 22,
                 ),
@@ -558,7 +549,7 @@ class _DrugListItem extends StatelessWidget {
                   children: [
                     Text(
                       drug.name,
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: VetifiTheme.textPrimary,
@@ -573,7 +564,10 @@ class _DrugListItem extends StatelessWidget {
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        _InfoChip(label: drug.route, color: VetifiTheme.secondary),
+                        _InfoChip(
+                          label: drug.route,
+                          color: VetifiTheme.secondary,
+                        ),
                         _InfoChip(
                           label: drug.concentrationRaw,
                           color: drug.concentration == null
@@ -593,8 +587,8 @@ class _DrugListItem extends StatelessWidget {
                         text: drug.validationErrors.isNotEmpty
                             ? drug.validationErrors.first
                             : drug.concentration == null
-                                ? 'Invalid concentration: ${drug.concentrationRaw}'
-                                : 'Data issue detected',
+                            ? 'Invalid concentration: ${drug.concentrationRaw}'
+                            : 'Data issue detected',
                         color: VetifiTheme.warning,
                       ),
                   ],
@@ -623,7 +617,7 @@ class _Note extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6),
       child: Text(
         text,
-        style: GoogleFonts.inter(fontSize: 11.5, color: color, height: 1.3),
+        style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: color, height: 1.3),
       ),
     );
   }
@@ -644,7 +638,11 @@ class _InfoChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w500, color: color),
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
       ),
     );
   }
@@ -669,7 +667,7 @@ class _SpeciesTag extends StatelessWidget {
         const SizedBox(width: 3),
         Text(
           label,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: FontWeight.w500,
             color: VetifiTheme.textSecondary,

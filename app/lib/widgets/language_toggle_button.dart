@@ -32,7 +32,10 @@ class LanguageToggleButton extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(20),
@@ -50,10 +53,7 @@ class LanguageToggleButton extends StatelessWidget {
                       color: Colors.white,
                     ),
                     const SizedBox(width: 6),
-                    _LangChip(
-                      label: 'EN',
-                      isSelected: !isKn,
-                    ),
+                    _LangChip(label: 'EN', isSelected: !isKn),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Text(
@@ -64,10 +64,7 @@ class LanguageToggleButton extends StatelessWidget {
                         ),
                       ),
                     ),
-                    _LangChip(
-                      label: 'ಕನ್ನಡ',
-                      isSelected: isKn,
-                    ),
+                    _LangChip(label: 'ಕನ್ನಡ', isSelected: isKn),
                   ],
                 ),
               ),
@@ -91,18 +88,16 @@ class _LangChip extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: isSelected
-            ? Colors.white
-            : Colors.transparent,
+        color: isSelected ? Colors.white : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         label,
-        style: GoogleFonts.inter(
+        style: GoogleFonts.plusJakartaSans(
           fontSize: 12,
           fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
           color: isSelected
-              ? const Color(0xFF1B6B4A) // Primary deep green
+              ? const Color(0xFF1E40AF) // Primary royal sapphire blue
               : Colors.white.withValues(alpha: 0.85),
         ),
       ),

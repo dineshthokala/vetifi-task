@@ -8,15 +8,31 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class VetifiTheme {
-  // Brand colours
-  static const Color primary = Color(0xFF1B6B4A);       // Deep veterinary green
-  static const Color primaryLight = Color(0xFF2E8B65);
-  static const Color primaryDark = Color(0xFF0E4D33);
-  static const Color secondary = Color(0xFF3B82F6);      // Blue for actions
-  static const Color surface = Color(0xFFF8FAFB);
+  // Brand colours — Modern Medical Sapphire, Cobalt & Azure
+  static const Color primary = Color(0xFF1E40AF); // Rich royal sapphire blue
+  static const Color primaryLight = Color(0xFF3B82F6); // Vibrant cobalt blue
+  static const Color primaryDark = Color(0xFF0F2B5C); // Deep midnight navy
+  static const Color secondary = Color(0xFF0284C7); // Electric azure/cyan
+  static const Color surface = Color(0xFFF8FAFC);
   static const Color surfaceCard = Color(0xFFFFFFFF);
-  static const Color background = Color(0xFFF0F4F3);
-  
+  static const Color background = Color(0xFFF1F5F9); // Clean cool slate
+
+  // Smooth horizontal gradient across top headers (Navy to Cobalt)
+  static const LinearGradient primaryGradient = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [
+      Color(0xFF1E3A8A), // Deep navy sapphire
+      Color(0xFF2563EB), // Rich cobalt blue
+    ],
+  );
+
+  static const LinearGradient buttonGradient = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [Color(0xFF1E40AF), Color(0xFF2563EB)],
+  );
+
   // Semantic colours
   static const Color error = Color(0xFFDC2626);
   static const Color errorBg = Color(0xFFFEF2F2);
@@ -26,17 +42,19 @@ class VetifiTheme {
   static const Color successBg = Color(0xFFF0FDF4);
   static const Color info = Color(0xFF2563EB);
   static const Color infoBg = Color(0xFFEFF6FF);
-  
+
   // Text colours
-  static const Color textPrimary = Color(0xFF1A1A2E);
-  static const Color textSecondary = Color(0xFF6B7280);
-  static const Color textMuted = Color(0xFF9CA3AF);
+  static const Color textPrimary = Color(0xFF0F172A);
+  static const Color textSecondary = Color(0xFF475569);
+  static const Color textMuted = Color(0xFF94A3B8);
   static const Color textOnPrimary = Color(0xFFFFFFFF);
 
-  // Result display — must be impossible to misread
-  static const Color resultBg = Color(0xFF0F172A);
+  // Result display — dark high-contrast card with electric cyan/azure readout
+  static const Color resultBg = Color(0xFF0B132B); // Cosmic midnight blue
   static const Color resultText = Color(0xFFFFFFFF);
-  static const Color resultAccent = Color(0xFF34D399); // Green for volume
+  static const Color resultAccent = Color(
+    0xFF38BDF8,
+  ); // Radiant sky/cyan blue for volume
   static const Color cappedWarning = Color(0xFFFBBF24); // Yellow for capped
 
   // Withdrawn drug
@@ -49,8 +67,8 @@ class VetifiTheme {
     final isKannada = lang != null && lang.toString().contains('kn');
     final textTheme = isKannada
         ? GoogleFonts.notoSansKannadaTextTheme()
-        : GoogleFonts.interTextTheme();
-    
+        : GoogleFonts.plusJakartaSansTextTheme();
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -99,8 +117,12 @@ class VetifiTheme {
         backgroundColor: primary,
         foregroundColor: textOnPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.inter(
+        iconTheme: const IconThemeData(color: Colors.white),
+        actionsIconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: textOnPrimary,
@@ -108,17 +130,18 @@ class VetifiTheme {
       ),
       cardTheme: CardThemeData(
         color: surfaceCard,
-        elevation: 1,
-        shadowColor: Colors.black12,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        elevation: 1.5,
+        shadowColor: const Color(0xFF0F172A).withValues(alpha: 0.08),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceCard,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -146,7 +169,7 @@ class VetifiTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: GoogleFonts.plusJakartaSans(
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
@@ -155,10 +178,11 @@ class VetifiTheme {
       chipTheme: ChipThemeData(
         backgroundColor: surface,
         selectedColor: primary.withValues(alpha: 0.15),
-        labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+        labelStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
         ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         side: BorderSide(color: Colors.grey.shade300),
       ),
     );

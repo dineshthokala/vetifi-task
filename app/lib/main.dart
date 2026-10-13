@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'l10n/app_language.dart';
+// Multi-language import commented out for now:
+// import 'l10n/app_language.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await LanguageController.instance.init();
+  // Multi-language disabled for now:
+  // await LanguageController.instance.init();
   runApp(const VetifiApp());
 }
 
@@ -15,18 +17,25 @@ class VetifiApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<AppLanguage>(
-      valueListenable: LanguageController.instance.currentLanguage,
-      builder: (context, lang, _) {
-        return MaterialApp(
-          title: lang == AppLanguage.kn
-              ? 'ವೆಟಿಫೈ - ಪಶುವೈದ್ಯಕೀಯ ಡೋಸ್ ಕ್ಯಾಲ್ಕುಲೇಟರ್'
-              : 'Vetifi - Drug Dose Calculator',
-          debugShowCheckedModeBanner: false,
-          theme: VetifiTheme.themeFor(lang),
-          home: const HomeScreen(),
-        );
-      },
+    // Multi-language dynamic switching commented out for now:
+    // return ValueListenableBuilder<AppLanguage>(
+    //   valueListenable: LanguageController.instance.currentLanguage,
+    //   builder: (context, lang, _) {
+    //     return MaterialApp(
+    //       title: lang == AppLanguage.kn
+    //           ? 'ವೆಟಿಫೈ - ಪಶುವೈದ್ಯಕೀಯ ಡೋಸ್ ಕ್ಯಾಲ್ಕುಲೇಟರ್'
+    //           : 'Vetifi - Drug Dose Calculator',
+    //       debugShowCheckedModeBanner: false,
+    //       theme: VetifiTheme.themeFor(lang),
+    //       home: const HomeScreen(),
+    //     );
+    //   },
+    // );
+    return MaterialApp(
+      title: 'Vetifi - Drug Dose Calculator',
+      debugShowCheckedModeBanner: false,
+      theme: VetifiTheme.theme,
+      home: const HomeScreen(),
     );
   }
 }

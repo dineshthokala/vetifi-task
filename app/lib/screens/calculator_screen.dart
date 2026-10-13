@@ -15,7 +15,8 @@ import '../models/drug.dart';
 import '../services/dose_calculator.dart';
 import '../services/database_service.dart';
 import '../theme.dart';
-import '../widgets/language_toggle_button.dart';
+// import '../widgets/language_toggle_button.dart';
+import '../widgets/version_badge.dart';
 
 class CalculatorScreen extends StatefulWidget {
   final Drug drug;
@@ -236,36 +237,35 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   Widget build(BuildContext context) {
     final drug = widget.drug;
 
-    return ValueListenableBuilder<AppLanguage>(
-      valueListenable: LanguageController.instance.currentLanguage,
-      builder: (context, currentLang, _) {
-        final strings = AppStrings(currentLang);
+    // Multi-language toggle commented out for now (defaults to English):
+    // return ValueListenableBuilder<AppLanguage>(
+    //   valueListenable: LanguageController.instance.currentLanguage,
+    //   builder: (context, currentLang, _) {
+    const strings = AppStrings(AppLanguage.en);
 
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(drug.name),
-            actions: [
-              const LanguageToggleButton(),
-              const SizedBox(width: 8),
-              Container(
-                margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    widget.datasetVersion,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: VetifiTheme.primaryGradient,
+          ),
+        ),
+        title: Text(
+          drug.name,
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          // const LanguageToggleButton(),
+          if (widget.datasetVersion.isNotEmpty)
+            VersionBadge(version: widget.datasetVersion),
+          const SizedBox(width: 8),
+        ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -428,13 +428,41 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     const SizedBox(height: 20),
 
                     // Calculate button
-                    SizedBox(
+                    Container(
                       height: 52,
-                      child: ElevatedButton.icon(
-                        onPressed: _calculate,
-                        icon: const Icon(Icons.calculate, size: 22),
-                        label: Text(
-                          _isCriMode ? strings.criSectionTitle : strings.calculateDose,
+                      decoration: BoxDecoration(
+                        gradient: VetifiTheme.buttonGradient,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: VetifiTheme.primary.withValues(alpha: 0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: _calculate,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.calculate, size: 22, color: Colors.white),
+                              const SizedBox(width: 8),
+                              Text(
+                                _isCriMode
+                                    ? strings.criSectionTitle
+                                    : strings.calculateDose,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -494,8 +522,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
             ),
           ),
         );
-      },
-    );
+    //   },
+    // );
   }
 
   Widget _buildCriInputs(AppStrings strings) {
@@ -600,7 +628,7 @@ class _DrugInfoCard extends StatelessWidget {
                   children: [
                     Text(
                       drug.name,
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: VetifiTheme.textPrimary,
@@ -608,7 +636,7 @@ class _DrugInfoCard extends StatelessWidget {
                     ),
                     Text(
                       drug.id.toUpperCase(),
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         color: VetifiTheme.textMuted,
                         fontWeight: FontWeight.w500,
@@ -673,7 +701,7 @@ class _DetailItem extends StatelessWidget {
       children: [
         Text(
           label,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             color: VetifiTheme.textMuted,
             fontWeight: FontWeight.w500,
@@ -682,7 +710,7 @@ class _DetailItem extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             color: isError ? VetifiTheme.error : VetifiTheme.textPrimary,
             fontWeight: FontWeight.w600,
@@ -726,7 +754,7 @@ class _SpeciesSelector extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   strings.speciesName(species),
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w500,
                     color: selected
                         ? VetifiTheme.primary
@@ -796,7 +824,7 @@ class _UnitButton extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             fontWeight: FontWeight.w600,
             color: selected ? Colors.white : VetifiTheme.textPrimary,
@@ -842,7 +870,7 @@ class _WarningBanner extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: color,
@@ -851,7 +879,7 @@ class _WarningBanner extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   message,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     color: color.withValues(alpha: 0.85),
                   ),
@@ -902,7 +930,7 @@ class _ResultNote extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: GoogleFonts.inter(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 12.5,
                 height: 1.35,
                 color: color.withValues(alpha: 0.95),
@@ -986,7 +1014,7 @@ class _DoseResultCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   strings.resultHeader,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: VetifiTheme.resultText,
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
@@ -995,7 +1023,7 @@ class _DoseResultCard extends StatelessWidget {
                 const Spacer(),
                 Text(
                   datasetVersion,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white54,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
@@ -1013,7 +1041,7 @@ class _DoseResultCard extends StatelessWidget {
                 Text(
                   strings.volumeToAdminister.toUpperCase(),
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: VetifiTheme.resultAccent.withValues(alpha: 0.8),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1028,7 +1056,7 @@ class _DoseResultCard extends StatelessWidget {
                   children: [
                     Text(
                       formatVolumeMl(result.volumeMinMl),
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.plusJakartaSans(
                         color: VetifiTheme.resultAccent,
                         fontSize: 36,
                         fontWeight: FontWeight.w800,
@@ -1037,7 +1065,7 @@ class _DoseResultCard extends StatelessWidget {
                     if (result.volumeMinMl != result.volumeMaxMl) ...[
                       Text(
                         ' – ',
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.plusJakartaSans(
                           color: VetifiTheme.resultAccent.withValues(alpha: 0.6),
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -1045,7 +1073,7 @@ class _DoseResultCard extends StatelessWidget {
                       ),
                       Text(
                         formatVolumeMl(result.volumeMaxMl),
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.plusJakartaSans(
                           color: VetifiTheme.resultAccent,
                           fontSize: 36,
                           fontWeight: FontWeight.w800,
@@ -1055,7 +1083,7 @@ class _DoseResultCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Text(
                       'mL',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.plusJakartaSans(
                         color: VetifiTheme.resultAccent.withValues(alpha: 0.7),
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -1096,7 +1124,7 @@ class _DoseResultCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     'Exact: ${_exactRange(result.volumeMinMl, result.volumeMaxMl)} mL',
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.plusJakartaSans(
                       color: Colors.white38,
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
@@ -1211,7 +1239,7 @@ class _CriResultCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   strings.criResultHeader,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: VetifiTheme.resultText,
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
@@ -1220,7 +1248,7 @@ class _CriResultCard extends StatelessWidget {
                 const Spacer(),
                 Text(
                   datasetVersion,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white54,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
@@ -1237,7 +1265,7 @@ class _CriResultCard extends StatelessWidget {
               children: [
                 Text(
                   strings.addToBag,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: VetifiTheme.resultAccent.withValues(alpha: 0.7),
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1252,7 +1280,7 @@ class _CriResultCard extends StatelessWidget {
                   children: [
                     Text(
                       formatVolumeMl(result.mlToAdd),
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.plusJakartaSans(
                         color: VetifiTheme.resultAccent,
                         fontSize: 36,
                         fontWeight: FontWeight.w800,
@@ -1261,7 +1289,7 @@ class _CriResultCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Text(
                       'mL',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.plusJakartaSans(
                         color: VetifiTheme.resultAccent.withValues(alpha: 0.7),
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -1272,7 +1300,7 @@ class _CriResultCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   strings.bagDuration.toUpperCase(),
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white38,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1282,7 +1310,7 @@ class _CriResultCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   formatDuration(result.bagDurationMinutes),
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white70,
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
@@ -1393,14 +1421,14 @@ class _ResultDetailRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.plusJakartaSans(
             color: Colors.white54,
             fontSize: 13,
           ),
         ),
         Text(
           value,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.plusJakartaSans(
             color: Colors.white.withValues(alpha: 0.9),
             fontSize: 13,
             fontWeight: FontWeight.w500,

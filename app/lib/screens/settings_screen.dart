@@ -85,7 +85,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings and sync')),
+      appBar: AppBar(
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: VetifiTheme.primaryGradient,
+          ),
+        ),
+        title: const Text(
+          'Settings and sync',
+          softWrap: false,
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -123,7 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 value: '$_pendingLogs',
               ),
               const SizedBox(height: 8),
-              Text(
+              _NoWrapText(
                 'Records are held on the device until a connection is '
                 'available, then uploaded in batches. Uploading twice is '
                 'harmless: the server deduplicates on the record ID.',
@@ -141,10 +155,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 controller: _serverController,
                 keyboardType: TextInputType.url,
                 autocorrect: false,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Base URL',
-                  helperText: 'The default 10.0.2.2 is the host machine as '
-                      'seen from an Android emulator.',
+                  helper: _NoWrapText(
+                    'The default 10.0.2.2 is the host machine as seen from an Android emulator.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: VetifiTheme.textMuted,
+                        ),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -160,19 +178,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.sync),
-                      label: const Text('Sync now'),
+                      label: const Text('Sync now', softWrap: false),
                     ),
                   ),
                   const SizedBox(width: 12),
                   OutlinedButton(
                     onPressed: _saveServerUrl,
-                    child: const Text('Save'),
+                    child: const Text('Save', softWrap: false),
                   ),
                 ],
               ),
               if (_syncMessage.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(
+                _NoWrapText(
                   _syncMessage,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: VetifiTheme.textSecondary,
@@ -185,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Section(
             title: 'Trust',
             children: [
-              Text(
+              _NoWrapText(
                 'Every dataset is verified against the Ed25519 public key '
                 'compiled into this build before a single row is written. An '
                 'update that fails verification is discarded, and the '
@@ -198,13 +216,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 10),
               _Row(
                 label: 'Public key',
-                value: '${UpdateService.serverPublicKeyHex.substring(0, 16)}...',
+                value: UpdateService.serverPublicKeyHex,
               ),
             ],
           ),
           const SizedBox(height: 24),
           Center(
-            child: Text(
+            child: _NoWrapText(
               'Vetifi 1.0.0 - fictional drugs, not for clinical use',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: VetifiTheme.textMuted,
@@ -240,9 +258,9 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          _NoWrapText(
             title.toUpperCase(),
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.1,
@@ -266,21 +284,55 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: VetifiTheme.textPrimary,
-                ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    label,
+                    softWrap: false,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    value,
+                    softWrap: false,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: VetifiTheme.textPrimary,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _NoWrapText extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+
+  const _NoWrapText(this.text, {this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Text(
+        text,
+        softWrap: false,
+        style: style,
       ),
     );
   }
