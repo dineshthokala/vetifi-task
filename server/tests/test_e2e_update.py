@@ -24,7 +24,8 @@ from server.app.main import app, seed_database
 
 ADMIN = {"X-Admin-Key": os.environ["ADMIN_KEY"]}
 SEED = Path(__file__).resolve().parent.parent / "seed"
-PUBLIC_KEY_HEX = Path("server/keys/public.hex").read_text().strip()
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PUBLIC_KEY_HEX = (REPO_ROOT / "server" / "keys" / "public.hex").read_text().strip()
 
 
 def sha256(data: str) -> str:
