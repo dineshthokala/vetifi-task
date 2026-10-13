@@ -182,7 +182,7 @@ benchmark competes with the 50,000-entry index construction in a sibling file.
 
 ---
 
-## 4. Demo script
+## 4. Demo Test
 
 This follows Part H.4. Steps 1–4 are the required content; step 5 is optional.
 

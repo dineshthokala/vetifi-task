@@ -278,6 +278,7 @@ fixed, and both were invisible to the tests that existed at the time.
 README.md            This file
 RUNBOOK.md           Setup, running, demo script, troubleshooting
 ARCHITECTURE.md      How every runtime path works
+USERFLOW.md          Screen-by-screen walkthrough of the whole app
 DECISIONS.md         Part F answers and Part G review
 BREAK_IT.md          Failure modes, defences, and what we did not fix
 AI_LOG.md            AI usage, including where it was wrong
@@ -289,6 +290,9 @@ AI_LOG.md            AI usage, including where it was wrong
 
 - **RUNBOOK.md** — prerequisites, running the server and app, the four publishing
   test cases, the step-by-step demo script, and troubleshooting.
+- **USERFLOW.md** — the whole app as a user walks it: every screen, every state,
+  every place the app refuses to calculate and why. Start here to understand
+  what the software does before reading how it is built.
 - **ARCHITECTURE.md** — cold start, search, calculation, update sync, and server
   publish, with the reasoning behind each decision.
 - **DECISIONS.md** — the six written questions and the code review. Each answer
