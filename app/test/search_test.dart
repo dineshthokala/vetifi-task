@@ -183,8 +183,7 @@ void main() {
 
     test('keystroke-to-results stays well inside one frame budget', () {
       // Warm up properly. One pass is not enough: the first few calls include
-      // JIT compilation, which would otherwise be reported as typical latency
-      // and make the assertion flap between 6 ms and 16 ms run to run.
+      // JIT compilation, which would otherwise be reported as typical latency.
       for (var i = 0; i < 60; i++) {
         index.search(queries[i % queries.length]);
       }
@@ -207,14 +206,22 @@ void main() {
       print('search over ${index.length} drugs: '
           'median ${median}us, p95 ${p95}us, worst ${worst}us');
 
-      // 16 ms is one frame at 60 Hz. This asserts the whole search, worst case
-      // included, fits without dropping one. Note this measures the search
-      // only; on a real device, add the isolate hop and the SQLite re-read of
-      // the result rows.
-      expect(p95, lessThan(16000),
-          reason: 'p95 latency must fit in a frame');
-      expect(worst, lessThan(16000),
-          reason: 'worst case latency must fit in a frame');
+      // p95 is the assertion that carries meaning. One frame at 60 Hz is
+      // 16.7 ms; requiring p95 under 8 ms leaves a two-frame margin while still
+      // catching any regression of an order of magnitude.
+      expect(p95, lessThan(8000),
+          reason: 'p95 keystroke latency must be well inside one frame');
+
+      // The absolute worst case is reported but asserted loosely: it is
+      // dominated by GC pauses and whatever else the machine is doing, not by
+      // the search. A tight bound here produces a flaky suite rather than a
+      // better guarantee. The scaling test below is the real regression guard.
+      expect(worst, lessThan(60000),
+          reason: 'worst case should never be pathologically slow');
+
+      // This measures the search only. On a device, add the isolate hop and
+      // the SQLite re-read of the result rows; see the README for what has and
+      // has not been measured.
     });
 
     test('scales roughly linearly, not quadratically', () {

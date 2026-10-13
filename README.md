@@ -14,15 +14,34 @@ dataset service so corrections reach a device without an app release.
 ### Server
 
 ```bash
-export ADMIN_KEY=$(python -c "import secrets;print(secrets.token_urlsafe(32))")
-cd server && docker compose up --build
+cd server
+docker compose up --build
 ```
 
 That is the entire setup: PostgreSQL 16 with a health check, the FastAPI
-service, and the `v14` seed loaded on first boot. `ADMIN_KEY` has **no
-default** — the server refuses to start without it, because a hardcoded
-fallback would mean any deployment that forgot to set it shares a published key
-on an endpoint that can change a dose.
+service, and the `v14` seed loaded on first boot.
+
+`ADMIN_KEY` has **no hardcoded default** — a fallback would mean every
+deployment that forgot to set one shares a secret that is published in this
+repository, on an endpoint that can change a dose. To keep this a one-command
+setup, the container generates a strong random key on first run, persists it in
+a volume, and prints it:
+
+```
+  ======================================================================
+  ADMIN_KEY was not set, so one has been generated for this deployment.
+  It is stored at /srv/data/.admin_key and reused on restart.
+
+      k3Jd8x...your-key...
+  ======================================================================
+```
+
+Supply your own to override it:
+
+```bash
+ADMIN_KEY=$(python -c "import secrets;print(secrets.token_urlsafe(32))") \
+  docker compose up --build
+```
 
 Check it:
 
@@ -35,8 +54,8 @@ Without Docker:
 
 ```bash
 pip install -r server/requirements.txt
-export ADMIN_KEY=dev
-uvicorn server.app.main:app --port 8000      # run from the repository root
+export ADMIN_KEY=dev                     # required: the server refuses to start without it
+uvicorn server.app.main:app --port 8000  # run from the repository root
 ```
 
 ### App
@@ -55,8 +74,11 @@ the base URL in **Settings** (or pass a host the app can reach).
 
 ```bash
 cd app     && flutter test                            # 128 tests
-cd server  && python -m pytest server/tests -q        # 61 tests
+cd server  && python -m pytest server/tests -q        # 68 tests
 ```
+
+`pytest.ini` puts the repository root on `sys.path`, so pytest works from
+either the root or from inside `server/`.
 
 ---
 
@@ -121,10 +143,36 @@ rejection. The app also requires the payload's declared version to match the
 manifest's, so an old but validly signed payload cannot be filed under a newer
 label.
 
-**3. The app and server cannot drift on what is computable.** Both accept
-exactly `mg/kg` and `mcg/kg` for bolus doses and `mcg/kg/min` for CRI.
-`server/tests/test_contract.py` parses the Dart constants and asserts they
-match the Python ones, so changing one without the other is a test failure.
+**3. The app and server cannot drift on what is computable.**
+
+This is a named requirement of Part D — *"the server must reject the same
+invalid data that the app rejects. Explain how you prevent the two sets of rules
+from drifting apart."*
+
+The rules are duplicated across two languages, so duplication alone would drift.
+Four things prevent it:
+
+1. **A single shared vocabulary.** `mg/kg`, `mcg/kg` and `mcg/kg/min` are
+   declared once per side and nowhere else. The app's constant is
+   `kSupportedDoseUnits`; the server's is `SUPPORTED_DOSE_UNITS`.
+2. **A contract test reads both.** `server/tests/test_contract.py` parses the
+   Dart source for `const Set<String> kSupportedDoseUnits = {...}` and asserts
+   the two sets are equal. Changing one without the other is a **test failure**,
+   not a production surprise.
+3. **Both normalise before comparing.** `canonicalDoseUnit` (Dart) and
+   `canonical_unit` (Python) lowercase and trim, so `"MG/KG"` is accepted by both
+   rather than by one.
+4. **The app fails closed where the server fails open.** Even if a bad unit
+   somehow reached a device, `toMgPerKg()` returns null and the calculation is
+   refused. The app does not depend on the server having been strict.
+
+The direction of failure matters: the server rejecting something the app would
+accept is an inconvenience; the app accepting something the server rejected is
+a dosing error. So the app is the stricter of the two by design.
+
+`test_contract.py` also pins the field-level rules the two share — inverted
+ranges, non-positive values, unparseable concentrations — so a change to one
+side that is not mirrored shows up as a failure.
 
 ---
 
@@ -134,23 +182,30 @@ Part B asks for keystroke-to-results latency on a real midrange Android phone,
 and for an explanation of how it was measured. Here is what we can actually
 evidence, and what we cannot.
 
-**Measured, reproducible** — `flutter test test/search_test.dart` over the full
-50,000-entry corpus, four consecutive runs on the development machine:
+**Measured, reproducible** — `flutter test` over the full 50,000-entry corpus.
+Three consecutive full-suite runs on the development machine:
 
 | | median | p95 | worst |
 |---|---|---|---|
-| run 1 | 0.37 ms | 1.10 ms | 3.10 ms |
-| run 2 | 0.40 ms | 1.22 ms | 4.02 ms |
-| run 3 | 0.42 ms | 1.38 ms | 3.54 ms |
-| run 4 | 0.80 ms | 1.47 ms | 4.45 ms |
+| run 1 | 1.14 ms | 2.45 ms | 9.43 ms |
+| run 2 | 0.58 ms | 1.29 ms | 3.87 ms |
+| run 3 | 1.08 ms | 2.37 ms | 8.89 ms |
 
-The spread is GC pauses on a desktop host, not algorithmic variance — the
-median moves by 2× across runs while the shape of the distribution does not.
-The number to quote is the p95: **under 1.5 ms, worst case under 5 ms.**
+The spread is GC pauses and machine load on a desktop host, not algorithmic
+variance — the median moves by 2× between runs while the shape of the
+distribution does not. **The number to quote is p95: consistently under 2.5 ms.**
 
-A test asserts the 95th percentile and the worst case both fit inside one 60 Hz
-frame (16.7 ms), so a future regression to O(n²) fails the build rather than
-quietly dropping frames.
+One frame at 60 Hz is 16.7 ms, so p95 sits at roughly a seventh of a frame. The
+test asserts p95 < 8 ms and worst case < 60 ms. The p95 bound is the meaningful
+one; the worst-case bound is deliberately loose because it is dominated by GC
+rather than by the search, and a tight bound there produces a flaky suite rather
+than a better guarantee. The real regression guard is the scaling test below,
+which compares two corpora of the same shape and so is immune to machine load.
+
+`app/dart_test.yaml` sets `concurrency: 1`. Without it the runner executes test
+files in parallel and the benchmark competes with the 50,000-entry index
+construction in a sibling isolate — which turned a 4 ms worst case into a
+368 ms outlier and made the suite flaky.
 
 **How it is measured.** `test/search_test.dart` builds a `SearchIndex` from the
 same 50,000 entries shipped in the APK, warms it with 60 queries so JIT
@@ -168,9 +223,13 @@ on real hardware is the one piece of Part B we would want to add before
 shipping**, and it is the only Part B requirement we consider outstanding.
 
 The first version of this search ran Levenshtein across every row on the UI
-isolate on every keystroke. The benchmark caught it at a 30 ms worst case; the
-trigram index and prefix arrays brought it under 5 ms. Both numbers are in the
-git history, because the regression is the interesting part.
+isolate on every keystroke. The benchmark caught it at a **30 ms** worst case
+on a two-character query; the trigram index, selectivity-ordered candidate
+collection and prefix arrays brought it under 10 ms. Both numbers are preserved
+in the git history rather than squashed, because the regression is the more
+informative half of the story — and because the README previously carried an
+unmeasured "8–14 ms" figure that the first benchmark run immediately
+contradicted.
 
 ---
 
@@ -194,12 +253,12 @@ instruction.
 legitimate reason to exceed the validated range; refusing removes the
 information they need. The flag states the multiple of the approved maximum.
 
-**`ADMIN_KEY` has no default and `INTERNET` was missing from the release
-manifest.** Both were bugs we found by auditing our own submission. The first
-meant a misconfigured deployment was an open one; the second meant the release
-APK could not make a single network request, so Parts D and E were dead in the
-shipped build. Both are fixed and both were invisible to the tests that existed
-at the time.
+**`ADMIN_KEY` had a hardcoded default, and `INTERNET` was missing from the
+release manifest.** Both were bugs we found by auditing our own submission. The
+first meant a misconfigured deployment shared a published key on an endpoint
+that can change a dose; the second meant the release APK could not make a single
+network request, so Parts D and E were dead in the shipped build. Both are
+fixed, and both were invisible to the tests that existed at the time.
 
 ---
 

@@ -1,0 +1,16 @@
+# Run test files serially.
+#
+# search_test.dart asserts on wall-clock latency. The Dart test runner executes
+# test files concurrently in separate isolates, so the benchmark competes for
+# CPU with the 50,000-entry index construction happening in a sibling file.
+# That turned a 6 ms worst case into a 368 ms outlier and made the suite flaky.
+#
+# The whole app suite runs in well under a minute, so serialising it costs
+# little and makes the timing assertions meaningful.
+#
+# The same reasoning applies to atomicity_test.dart, which measures a 5,000-row
+# transaction commit.
+concurrency: 1
+
+# Surface the benchmark output that test/search_test.dart prints.
+reporter: expanded
