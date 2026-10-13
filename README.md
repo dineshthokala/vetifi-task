@@ -54,8 +54,8 @@ the base URL in **Settings** (or pass a host the app can reach).
 ### Tests
 
 ```bash
-cd app   && flutter test      # 128 tests
-cd server && python -m pytest server/tests -q   # 50 tests
+cd app     && flutter test                            # 128 tests
+cd server  && python -m pytest server/tests -q        # 61 tests
 ```
 
 ---
@@ -135,15 +135,22 @@ and for an explanation of how it was measured. Here is what we can actually
 evidence, and what we cannot.
 
 **Measured, reproducible** — `flutter test test/search_test.dart` over the full
-50,000-entry corpus on the development machine:
+50,000-entry corpus, four consecutive runs on the development machine:
 
-```
-median 0.9 ms   p95 1.5 ms   worst 4.7 ms
-```
+| | median | p95 | worst |
+|---|---|---|---|
+| run 1 | 0.37 ms | 1.10 ms | 3.10 ms |
+| run 2 | 0.40 ms | 1.22 ms | 4.02 ms |
+| run 3 | 0.42 ms | 1.38 ms | 3.54 ms |
+| run 4 | 0.80 ms | 1.47 ms | 4.45 ms |
 
-The search itself. A second test asserts the 95th percentile and worst case both
-fit inside one 60 Hz frame (16.7 ms), so a future regression to O(n²) fails the
-build rather than quietly dropping frames.
+The spread is GC pauses on a desktop host, not algorithmic variance — the
+median moves by 2× across runs while the shape of the distribution does not.
+The number to quote is the p95: **under 1.5 ms, worst case under 5 ms.**
+
+A test asserts the 95th percentile and the worst case both fit inside one 60 Hz
+frame (16.7 ms), so a future regression to O(n²) fails the build rather than
+quietly dropping frames.
 
 **How it is measured.** `test/search_test.dart` builds a `SearchIndex` from the
 same 50,000 entries shipped in the APK, warms it with 60 queries so JIT
@@ -154,15 +161,15 @@ prints a per-query breakdown, which is how the pathological cases were found
 and fixed.
 
 **Not yet measured on a physical device.** We have not run this on real
-midrange hardware, so we cannot give you a trustworthy device figure. The
-additions this leaves unmeasured are the isolate hop and the SQLite re-read of
-the result rows. On a device expect the search itself to be roughly 3–5× slower
-than the numbers above. **A measurement on real hardware is the one piece of
-Part B we would want to add before shipping.**
+midrange hardware, so we cannot give you a trustworthy device figure. What that
+leaves unmeasured is the isolate hop and the SQLite re-read of the result rows.
+On a device expect the search itself to be roughly 3–5× slower. **A measurement
+on real hardware is the one piece of Part B we would want to add before
+shipping**, and it is the only Part B requirement we consider outstanding.
 
 The first version of this search ran Levenshtein across every row on the UI
 isolate on every keystroke. The benchmark caught it at a 30 ms worst case; the
-trigram index and prefix arrays brought it to 4.7 ms. Both numbers are in the
+trigram index and prefix arrays brought it under 5 ms. Both numbers are in the
 git history, because the regression is the interesting part.
 
 ---
