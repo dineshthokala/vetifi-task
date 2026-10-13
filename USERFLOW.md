@@ -40,8 +40,8 @@ permission prompt, and no network requirement at any point.
 |---|---|
 | 1 | A spinner on a white screen. |
 | 2 | The gradient app bar appears: a paw icon and **Vetifi**, with the search field docked below it. |
-| 3 | Below the search bar: `0 drugs` on the left, `Dataset v14` on the right. |
-| 4 | The empty state: a faded pill icon, **Search for a drug**, and *Type at least two letters to search.* |
+| 3 | Below the search bar: the dataset's drug count on the left (e.g. `10 drugs`), `Dataset v14` on the right. |
+| 4 | Small datasets (60 or fewer drugs) list every drug immediately. Large datasets show the empty state instead: a faded pill icon, **Search for a drug**, and *Type at least two letters to search.* |
 | 5 | If a server is reachable, a sync banner appears at the top. If not, an offline banner does. |
 
 Behind step 1 the app seeds 50,010 drugs from the bundled asset and builds the
@@ -76,7 +76,9 @@ order:
    ones.
 
 Results are capped at 60. The count line reads `60 drugs` even when more
-match — the cap is visible as a number, not hidden.
+match — the cap is visible as a number, not hidden. With no query typed, the
+count names the whole installed dataset instead (`50,010 drugs`), so it never
+reads `0 drugs` for a full database.
 
 ### 3.2 The result row
 
@@ -163,6 +165,12 @@ A numeric field and a `kg` / `lb` toggle. Changing the unit clears the result.
 The toggle does not reinterpret the number — switching from kg to lb leaves the
 digits alone. The user is expected to retype, because silently multiplying a
 typed weight is the kind of helpfulness that causes a dosing error.
+
+Putting the keyboard away is explicit everywhere: the action key reads
+`done` on the last field (and `next` to move down the CRI fields), tapping
+empty space or dragging dismisses, and a back press with the keyboard open
+hides the keyboard instead of leaving the screen — the next back press pops
+normally.
 
 ### Step 4 — calculate
 
@@ -317,7 +325,11 @@ its data is, which is the part actually within its control.
 ### Returning from settings
 
 A sync is attempted on the way back, so a user who changed the base URL sees
-the result of that change immediately rather than having to guess.
+the result of that change immediately rather than having to guess. The home
+screen then reloads whenever the installed version differs from what it is
+displaying — not only when its own sync performed the replacement. Syncing to
+v15 inside Settings and pressing back shows v15 on home, with the new index to
+match, instead of a stale v14.
 
 ---
 

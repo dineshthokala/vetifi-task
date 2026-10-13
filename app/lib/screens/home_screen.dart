@@ -39,6 +39,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
 
+  /// Owned here, not created in build: a fresh FocusNode per rebuild drops
+  /// keyboard focus every time setState fires (i.e. on every keystroke).
+  final FocusNode _searchFocus = FocusNode();
+
   /// The search index, kept as a transferable map so it can be handed to an
   /// isolate without re-serialising a 50,000-entry object graph per keystroke.
   Map<String, dynamic>? _indexData;
@@ -47,9 +51,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   bool _searching = false;
   String _datasetVersion = '';
+
+  /// Total drugs in the installed dataset. The count line shows this when no
+  /// query is active: showing "0 drugs" for an empty query reads as an empty
+  /// dataset, which is exactly the confusion it caused.
+  int _totalDrugs = 0;
   String? _stalenessWarning;
   String? _syncMessage;
   bool _syncFailed = false;
+  bool _isOffline = false;
 
   Timer? _debounce;
 
@@ -62,14 +72,24 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDrugs();
-    unawaited(_backgroundSync());
+    unawaited(_init());
+  }
+
+  /// Load the local dataset first, then sync against it. The sync decision
+  /// ("did the dataset change?") is only meaningful against a displayed
+  /// version that is already current: firing load and sync concurrently lets
+  /// the initial load land after the sync and show a stale version with no
+  /// further correction until the next sync.
+  Future<void> _init() async {
+    await _loadDrugs();
+    await _backgroundSync();
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -78,10 +98,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final entries = await DatabaseService.getSearchIndexEntries();
     final index = SearchIndex.fromEntries(entries);
     final info = await DatabaseService.getDatasetInfo();
+    // Small datasets (a fresh seed, a test server) are browsable: show them
+    // up front instead of an empty screen that reads as "no data". Large
+    // datasets still require a query -- hydrating tens of thousands of rows
+    // into a ListView is exactly what the result cap exists to avoid.
+    final List<Drug> initial = entries.length <= _searchResultLimit
+        ? await DatabaseService.getAllDrugs()
+        : const <Drug>[];
     if (!mounted) return;
     setState(() {
       _indexData = index.toTransferable();
-      _results = const [];
+      _results = initial;
+      _totalDrugs = entries.length;
       _datasetVersion = info.version;
       _stalenessWarning = _stalenessMessage(info.age, info.version);
       _loading = false;
@@ -111,13 +139,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final outcome = await SyncService.syncNow();
     if (!mounted) return;
 
-    if (outcome.datasetChanged) {
+    // The dataset can change without this sync doing it: the user may have
+    // pressed "Sync now" in Settings, which returns with the database already
+    // updated. Then before == after, datasetChanged is false, but this screen
+    // is still showing the old version with a stale index. Reload whenever the
+    // installed version differs from what is displayed, not just when this
+    // sync performed the replacement.
+    final installed = await DatabaseService.getDatasetVersion();
+    if (outcome.datasetChanged ||
+        (_datasetVersion.isNotEmpty && installed != _datasetVersion)) {
       await _loadDrugs();
       if (!mounted) return;
     }
     setState(() {
       _syncMessage = outcome.datasetMessage;
       _syncFailed = outcome.datasetFailed;
+      _isOffline = outcome.isOffline;
     });
   }
 
@@ -238,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
           preferredSize: const Size.fromHeight(66),
           child: _SearchBar(
             controller: _searchController,
-            focusNode: FocusNode(),
+            focusNode: _searchFocus,
             hintText: strings.searchHint,
             onChanged: _onSearchChanged,
             onClear: () {
@@ -259,18 +296,24 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           if (_syncMessage != null && !_searching)
             _AdvisoryBanner(
-              icon: _syncFailed
+              icon: _isOffline
                   ? Icons.cloud_off_outlined
-                  : Icons.cloud_done_outlined,
-              color: _syncFailed ? VetifiTheme.textMuted : VetifiTheme.info,
-              background: _syncFailed
-                  ? VetifiTheme.background
-                  : VetifiTheme.infoBg,
+                  : (_syncFailed
+                      ? Icons.error_outline
+                      : Icons.cloud_done_outlined),
+              color: _isOffline
+                  ? VetifiTheme.offline
+                  : (_syncFailed ? VetifiTheme.error : VetifiTheme.info),
+              background: _isOffline
+                  ? VetifiTheme.offlineBg
+                  : (_syncFailed ? VetifiTheme.errorBg : VetifiTheme.infoBg),
               message: _syncMessage!,
             ),
           _ResultCount(
             count: _results.length,
+            total: _totalDrugs,
             searching: _searching,
+            hasQuery: _searchController.text.trim().isNotEmpty,
             version: _datasetVersion,
           ),
           Expanded(child: _buildBody(strings)),
@@ -330,6 +373,9 @@ class _SearchBar extends StatelessWidget {
         controller: controller,
         focusNode: focusNode,
         onChanged: onChanged,
+        // Searching already ran via onChanged; the action key just puts the
+        // keyboard away so the results are visible.
+        onSubmitted: (_) => focusNode.unfocus(),
         textInputAction: TextInputAction.search,
         autocorrect: false,
         enableSuggestions: false,
@@ -402,23 +448,34 @@ class _AdvisoryBanner extends StatelessWidget {
 
 class _ResultCount extends StatelessWidget {
   final int count;
+  final int total;
   final bool searching;
+  final bool hasQuery;
   final String version;
 
   const _ResultCount({
     required this.count,
+    required this.total,
     required this.searching,
+    required this.hasQuery,
     required this.version,
   });
 
   @override
   Widget build(BuildContext context) {
+    // With no query there are no "results" yet, so the count names the whole
+    // installed dataset instead of reading "0 drugs" for a full database.
+    final label = searching
+        ? 'Searching...'
+        : hasQuery
+        ? '$count drug${count == 1 ? '' : 's'}'
+        : '$total drug${total == 1 ? '' : 's'}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Row(
         children: [
           Text(
-            searching ? 'Searching...' : '$count drug${count == 1 ? '' : 's'}',
+            label,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(width: 8),

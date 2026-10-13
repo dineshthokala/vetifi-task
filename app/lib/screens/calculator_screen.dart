@@ -37,7 +37,17 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   final TextEditingController _doseRateController = TextEditingController();
   final TextEditingController _fluidRateController = TextEditingController();
   final TextEditingController _bagSizeController = TextEditingController();
-  
+
+  final FocusNode _weightFocus = FocusNode();
+  final FocusNode _doseRateFocus = FocusNode();
+  final FocusNode _fluidRateFocus = FocusNode();
+  final FocusNode _bagSizeFocus = FocusNode();
+
+  /// True while any input holds focus. Drives the back-button guard: a back
+  /// press with the keyboard open must put the keyboard away, never pop the
+  /// screen out from under the user's fingers.
+  bool _inputFocused = false;
+
   String _weightUnit = 'kg';
   String? _selectedSpecies;
   DoseResult? _result;
@@ -59,10 +69,38 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     if (species.length == 1) {
       _selectedSpecies = species.first;
     }
+    for (final node in _focusNodes) {
+      node.addListener(_onFocusChanged);
+    }
+  }
+
+  List<FocusNode> get _focusNodes => [
+    _weightFocus,
+    _doseRateFocus,
+    _fluidRateFocus,
+    _bagSizeFocus,
+  ];
+
+  void _onFocusChanged() {
+    final any = _focusNodes.any((node) => node.hasFocus);
+    if (any != _inputFocused) {
+      setState(() => _inputFocused = any);
+    }
+  }
+
+  /// Puts the keyboard away without touching the route.
+  void _dismissKeyboard() {
+    for (final node in _focusNodes) {
+      node.unfocus();
+    }
   }
 
   @override
   void dispose() {
+    for (final node in _focusNodes) {
+      node.removeListener(_onFocusChanged);
+      node.dispose();
+    }
     _weightController.dispose();
     _doseRateController.dispose();
     _fluidRateController.dispose();
@@ -243,31 +281,49 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     //   builder: (context, currentLang, _) {
     const strings = AppStrings(AppLanguage.en);
 
-    return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: VetifiTheme.primaryGradient,
+    // A back press with the keyboard open hides the keyboard instead of
+    // leaving the screen. On most devices the system consumes that press to
+    // hide the IME and the route never sees it; on devices and keyboards that
+    // deliver it to the app (seen with Gboard's hide-keyboard key), this guard
+    // is what stops the calculator closing under the user's fingers. The next
+    // back press, with nothing focused, pops normally.
+    return PopScope(
+      canPop: !_inputFocused,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _dismissKeyboard();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          backgroundColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: VetifiTheme.primaryGradient,
+            ),
           ),
+          title: Text(
+            drug.name,
+            style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          actions: [
+            // const LanguageToggleButton(),
+            if (widget.datasetVersion.isNotEmpty)
+              VersionBadge(version: widget.datasetVersion),
+            const SizedBox(width: 8),
+          ],
         ),
-        title: Text(
-          drug.name,
-          style: GoogleFonts.plusJakartaSans(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        actions: [
-          // const LanguageToggleButton(),
-          if (widget.datasetVersion.isNotEmpty)
-            VersionBadge(version: widget.datasetVersion),
-          const SizedBox(width: 8),
-        ],
-          ),
-          body: SingleChildScrollView(
+        // Tapping empty space puts the keyboard away; dragging already does
+        // via keyboardDismissBehavior below. Taps on buttons and fields are
+        // unaffected: the deepest gesture recognizer wins the arena.
+        body: GestureDetector(
+          onTap: _dismissKeyboard,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior:
+                ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -362,9 +418,12 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                         Expanded(
                           child: TextField(
                             controller: _weightController,
+                            focusNode: _weightFocus,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _weightFocus.unfocus(),
                             decoration: InputDecoration(
                               hintText: strings.enterWeightHint,
                               errorText: _weightError,
@@ -521,7 +580,9 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               ],
             ),
           ),
-        );
+        ),
+      ),
+    );
     //   },
     // );
   }
@@ -543,7 +604,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _doseRateController,
+          focusNode: _doseRateFocus,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => _fluidRateFocus.requestFocus(),
           decoration: InputDecoration(
             hintText: 'e.g. ${criDose.min}',
             prefixIcon: const Icon(Icons.speed),
@@ -558,7 +622,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _fluidRateController,
+          focusNode: _fluidRateFocus,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => _bagSizeFocus.requestFocus(),
           decoration: const InputDecoration(
             hintText: 'e.g. 10',
             prefixIcon: Icon(Icons.water_drop_outlined),
@@ -573,7 +640,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _bagSizeController,
+          focusNode: _bagSizeFocus,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _bagSizeFocus.unfocus(),
           decoration: const InputDecoration(
             hintText: 'e.g. 500',
             prefixIcon: Icon(Icons.local_drink_outlined),
