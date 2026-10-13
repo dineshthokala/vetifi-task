@@ -266,12 +266,18 @@ fixed, and both were invisible to the tests that existed at the time.
 
 ```
 /app                 Flutter application
+  assets/data/       base_dataset_v14.json + generated_50k_drugs.json
+  lib/services/      dose_calculator · search_index · update_service ·
+                     sync_service · database_service
+  test/              128 tests
 /server              FastAPI dataset server
   keys/              Signing keypair (private.hex is committed for the demo)
   seed/              v14 base dataset and the v15-v18 publishing test cases
-  tests/             50 tests
-  Dockerfile, docker-compose.yml
+  tests/             68 tests
+  Dockerfile, docker-compose.yml, entrypoint.sh
 README.md            This file
+RUNBOOK.md           Setup, running, demo script, troubleshooting
+ARCHITECTURE.md      How every runtime path works
 DECISIONS.md         Part F answers and Part G review
 BREAK_IT.md          Failure modes, defences, and what we did not fix
 AI_LOG.md            AI usage, including where it was wrong
@@ -281,9 +287,13 @@ AI_LOG.md            AI usage, including where it was wrong
 
 ## Further reading
 
+- **RUNBOOK.md** — prerequisites, running the server and app, the four publishing
+  test cases, the step-by-step demo script, and troubleshooting.
+- **ARCHITECTURE.md** — cold start, search, calculation, update sync, and server
+  publish, with the reasoning behind each decision.
 - **DECISIONS.md** — the six written questions and the code review. Each answer
   names the test that verifies it.
-- **BREAK_IT.md** — 20 failure modes with defences and test names, the manual
+- **BREAK_IT.md** — 22 failure modes with defences and test names, the manual
   atomicity procedure, five unfixed issues, and six deliberate behaviours that
   look like bugs.
 - **AI_LOG.md** — what AI got wrong here, in detail.
