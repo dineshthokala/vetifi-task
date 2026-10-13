@@ -164,34 +164,18 @@ class UpdateService {
     }
   }
 
-  static Future<void> _ensureServerUrl() async {
-    if (_serverUrl != defaultServerUrl) return;
-    final candidates = [
-      'http://127.0.0.1:8000',
-      'http://10.0.2.2:8000',
-      'http://192.168.1.7:8000',
-    ];
-    for (final base in candidates) {
-      try {
-        final res = await http
-            .get(Uri.parse('$base/health'))
-            .timeout(const Duration(milliseconds: 1500));
-        if (res.statusCode == 200) {
-          _serverUrl = base;
-          return;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-  }
-
   /// Checks the manifest for a newer dataset.
   ///
   /// The manifest is signed with the same key as payloads, and a missing or
   /// invalid signature is a hard failure.
+  ///
+  /// The server URL is the default (the host as seen from an emulator) or
+  /// whatever the user saved in Settings. There used to be a probe here that
+  /// tried 127.0.0.1, 10.0.2.2 and a hardcoded LAN IP on every sync; it was
+  /// removed because the LAN address is dead in release builds (blocked by the
+  /// network security config) and silently switching servers is not something
+  /// a dosing app should do behind the user's back.
   static Future<UpdateOutcome> checkForUpdate() async {
-    await _ensureServerUrl();
     final currentVersion = await DatabaseService.getDatasetVersion();
 
     http.Response response;
@@ -385,7 +369,18 @@ class UpdateService {
     if (source is List) {
       for (final entry in source) {
         if (entry is Map<String, dynamic>) {
-          upserts.add(Drug.fromJson(entry));
+          // Drug.fromJson is total for JSON-shaped input, but a mistyped
+          // field the model does not expect must refuse the payload, not
+          // escape as a TypeError that SyncService would misreport as
+          // "working offline".
+          try {
+            upserts.add(Drug.fromJson(entry));
+          } catch (_) {
+            return const UpdateOutcome(
+              UpdateStatus.malformed,
+              detail: 'unreadable drug entry',
+            );
+          }
         }
       }
     }
@@ -439,7 +434,6 @@ class UpdateService {
   /// uploaded, so an interrupted upload re-sends rather than silently dropping
   /// records. The server deduplicates on calc_id, so a re-send is harmless.
   static Future<int> uploadCalcLogs() async {
-    await _ensureServerUrl();
     var uploaded = 0;
     // Bound the work per call so a very backlogged device does not hold the
     // sync open indefinitely.
@@ -463,13 +457,27 @@ class UpdateService {
       if (response.statusCode != 200 && response.statusCode != 201) break;
 
       // Trust only what the server actually recorded. `inserted` plus
-      // `duplicates` accounts for every row we sent; anything else means the
-      // server dropped records and we must not mark them as uploaded.
+      // `duplicates` accounts for rows the server kept; `rejected_ids` names
+      // the rows it refused. A refused row can never be accepted on retry, so
+      // it is retired rather than resent: without this one bad row holds the
+      // whole queue at its head and uploads stop forever. Anything else
+      // unaccounted for means the server dropped records silently, and we
+      // must not mark them as uploaded.
       int accounted = 0;
       try {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
+        // Only ids from this batch count: a response naming rows we never
+        // sent must not retire anything.
+        final sentIds =
+            logs.map((l) => l['calc_id'] as String).toSet();
+        final rejectedIds = (body['rejected_ids'] as List?)
+                ?.whereType<String>()
+                .where(sentIds.contains)
+                .length ??
+            0;
         accounted = ((body['inserted'] as num?)?.toInt() ?? 0) +
-            ((body['duplicates'] as num?)?.toInt() ?? 0);
+            ((body['duplicates'] as num?)?.toInt() ?? 0) +
+            rejectedIds;
       } catch (_) {
         break;
       }

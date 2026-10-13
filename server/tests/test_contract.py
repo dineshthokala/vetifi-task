@@ -128,3 +128,62 @@ def test_null_species_is_allowed():
     assert validate_drug_entry(
         _valid_drug(doses={"dog": {"min": 1, "max": 2, "unit": "mg/kg"}, "cat": None})
     ) == []
+
+
+def test_rejects_nan_and_infinity():
+    """Python's json parses NaN/Infinity; Dart's jsonDecode rejects them, so a
+    published version containing them could never be applied by any client."""
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        errors = validate_drug_entry(
+            _valid_drug(doses={"dog": {"min": bad, "max": 2, "unit": "mg/kg"}})
+        )
+        assert any(e["field"] == "doses.dog.min" for e in errors), (bad, errors)
+        errors = validate_drug_entry(_valid_drug(max_total_mg=bad))
+        assert any(e["field"] == "max_total_mg" for e in errors), (bad, errors)
+
+
+def test_rejects_bool_max_total_mg():
+    """True is an int in Python; without a guard it would publish as 1 mg."""
+    errors = validate_drug_entry(_valid_drug(max_total_mg=True))
+    assert any(e["field"] == "max_total_mg" for e in errors), errors
+
+
+def test_rejects_duplicate_species_after_normalisation():
+    """The app keys doses by normalised species, so "Dog" and "dog" would
+    silently overwrite each other on the client."""
+    errors = validate_drug_entry(
+        _valid_drug(doses={
+            "Dog": {"min": 1, "max": 2, "unit": "mg/kg"},
+            "dog": {"min": 3, "max": 4, "unit": "mg/kg"},
+        })
+    )
+    assert any("normalises" in e["message"] for e in errors), errors
+
+
+def test_rejects_empty_and_all_null_doses():
+    """A drug with no usable dose would publish as uncalculable."""
+    assert any(
+        e["field"] == "doses"
+        for e in validate_drug_entry(_valid_drug(doses={}))
+    )
+    assert any(
+        e["field"] == "doses"
+        for e in validate_drug_entry(
+            _valid_drug(doses={"dog": None, "cat": None})
+        )
+    )
+
+
+def test_rejects_impossible_percentage():
+    """Above 100% w/v is physically impossible and always a data-entry error."""
+    errors = validate_drug_entry(_valid_drug(concentration="1000%"))
+    assert any(e["field"] == "concentration" for e in errors), errors
+    assert validate_drug_entry(_valid_drug(concentration="100%")) == []
+
+
+def test_rejects_non_ascii_digits_in_concentration():
+    """Python \\d matches Unicode digits and float() parses them; Dart's \\d
+    and double.tryParse are ASCII-only. Accepting them here would publish a
+    concentration no client can parse."""
+    errors = validate_drug_entry(_valid_drug(concentration="٥٠ mg/mL"))
+    assert any(e["field"] == "concentration" for e in errors), errors

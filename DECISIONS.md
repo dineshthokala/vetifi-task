@@ -14,22 +14,21 @@ questions 1 and 3 numerically.
 ### 1. Small doses
 
 A 2.5 kg cat dosed at 0.05–0.07 mg/kg from a 2.5 mg/mL solution needs
-0.05–0.07 mL. The result card shows `0.05 – 0.07 mL` at 36 pt, the active dose
-`0.125 – 0.175 mg` beside it, and the vial concentration directly beneath. Below
-1 mL the card adds: *"Use a 1 mL tuberculin syringe; a standard 3 mL syringe has
+0.05–0.07 mL. The result card shows `0.05 – 0.07 mL` large, the active dose
+`0.125 – 0.175 mg` beside it, and the vial concentration beneath. Below 1 mL
+the card adds: *"Use a 1 mL tuberculin syringe; a standard 3 mL syringe has
 0.1 mL graduations and cannot resolve this."* A 40 kg dog needing 38.4 mL shows
-`38.4 mL` with no advisory — a 20 mL or 60 mL syringe delivers it accurately.
+`38.4 mL` with no advisory — a large syringe delivers it accurately.
 
-**Refusal threshold: 0.01 mL**, the resolution of the smallest syringe in normal
-use. Below that the app returns an error — *"Required volume is below the
-measurable range of any syringe. Dilute before administering."* — rather than
-printing `0.000 mL`. An earlier version did print it, which reads as a confident
-instruction to draw up nothing.
+**Refusal threshold: 0.01 mL**, the smallest syringe resolution in normal use.
+Below that the app errors — *"Required volume is below the measurable range of
+any syringe. Dilute before administering."* — rather than printing `0.000 mL`,
+which reads as an instruction to draw up nothing.
 
-From 0.01 to 0.1 mL it refines the display and warns about syringe choice. Above
-10 mL it drops to one decimal and, when that rounding exceeds 1% of the volume,
-states the cost: *"changes this volume by 0.04 mL (0.1%)."* Where rounded and
-exact differ, the exact figure is printed underneath.
+From 0.01 to 0.1 mL it refines the display and warns about syringe choice.
+Above 10 mL it drops to one decimal and, when that rounding exceeds 1% of the
+volume, states the cost. Where rounded and exact differ, the exact figure
+prints underneath.
 
 *Tests: `dose_calculator_test.dart` → "Sub-measurable volumes", "Volume
 formatting"; `decisions_examples_test.dart` → "DECISIONS Q1".*
@@ -39,26 +38,25 @@ formatting"; `decisions_examples_test.dart` → "DECISIONS Q1".*
 ### 2. Missing species data
 
 **The strongest argument for showing the dog dose with a warning.** In a rural
-emergency with a dying patient, refusing can be the more dangerous choice. An
-experienced clinician can often extrapolate using knowledge the app cannot
-encode: body composition, drug-specific metabolism, or that this patient is
-already stabilised on the drug. A labelled reference point gives them something
-to adjust rather than forcing them to recall a value unaided.
+emergency with a dying patient, refusing can be the more dangerous choice: an
+experienced clinician can extrapolate from body composition or drug-specific
+metabolism, and a labelled reference point gives them something to adjust
+rather than forcing unaided recall.
 
 **Decision: refuse.**
 
-Cats are not small dogs, and the error is asymmetric. Feline glucuronidation is
-markedly slower, and drugs commonly dosed per kg in a canine formulary often
-have narrow feline margins.
+Cats are not small dogs, and the error is asymmetric — feline glucuronidation
+is markedly slower, and canine-formulary drugs often have narrow feline
+margins.
 
-The deciding factor is presentation, not principle. The fallback number would
-render identically to every valid result — same large type, same green
-confirmation. Under time pressure a number that looks validated gets used, and
-the warning is the part that fails: warnings are read in bursts and ignored under
-load. Once the app has shown one, the threshold for trusting the next drops.
+The deciding factor is presentation. The fallback number would render
+identically to every valid result — same large type, same confirmation. Under
+time pressure a number that looks validated gets used, and the warning is the
+part that fails: warnings are skimmed and ignored under load. Once the app has
+shown one, the threshold for trusting the next drops.
 
 So the app never presents the cat dose as existing: *"Cannot calculate: No dose
-data available for cat."* The same reasoning drives refusing unrecognised units.
+data available for cat."* The same reasoning refuses unrecognised units.
 
 *Test: `dose_calculator_test.dart` → "refuses a missing or null species dose".*
 
@@ -117,30 +115,27 @@ half-built version of it.
 
 ### 5. Leaked signing key
 
-**Attacker's capability.** With the private Ed25519 key and any network
-position — rogue Wi-Fi, DNS spoofing, compromised CDN — an attacker mints
-payloads with lethal doses and signs them correctly. Every app accepts them,
-because they are genuinely signed.
+**Attacker's capability.** With the private key and any network position —
+rogue Wi-Fi, DNS spoofing — an attacker mints lethal payloads and signs them
+correctly. Every syncing app accepts them: they are genuinely signed.
 
-**Effect on installed apps.** Offline devices keep working on stale data.
-Devices that sync adopt the attacker's doses silently: nothing signals a
-problem, and the concentration string looks legitimate.
+**The key lives on the server.** `private.hex` is committed to the repo, copied
+into the Docker image, and used to sign at request time — so anyone who reads
+the repo or controls the host can forge doses. Verification covers the network
+path, not host compromise. This is the issue we would not release with (see
+BREAK_IT).
 
-**Recovery: not possible without an app release.** The public key is compiled
-into the binary. Rotating it means a new build, and installing it means the
-affected users update through a channel we do not control — the population most
-likely to be offline.
+**Effect.** Offline devices keep working on stale data. Devices that sync adopt
+the attacker's doses silently: nothing signals a problem.
 
-**What we would change:**
+**Recovery needs an app release.** The public key is compiled into the binary,
+so rotation means a new build — reaching users through a channel we do not
+control, worst for the offline population most likely affected.
 
-1. **Two-level keys.** An offline root key signs short-lived intermediates; apps
-   hold only the root's public key. Rotation becomes a new intermediate.
-2. **A root-signed revocation list, fetched as a signed dataset.** This is what
-   makes recovery possible without a store release: the app already verifies
-   every signature, so a signed "these keys are revoked" document reuses the
-   existing trust path.
-3. **Threshold signing,** k-of-n, so one key is not the whole dataset.
-4. **Content transparency** — publish every hash to an append-only log.
+**What we would change:** an offline root key signing short-lived
+intermediates; a root-signed revocation list reusing the existing trust path;
+k-of-n threshold signing; an append-only transparency log of every published
+hash.
 
 ---
 
@@ -149,25 +144,16 @@ likely to be offline.
 **Where this is the wrong choice: a national formulary of ~500,000 entries on
 entry-level Android (≤2 GB RAM) over 2G.**
 
-Why it breaks:
+Why it breaks: the search index holds an id and name per entry, rebuilt at
+every cold start and copied to an isolate per query — at 500k that pass is
+itself a visible stall. It is in-memory, so re-derived every launch. Updates
+arrive as JSON deltas applied row by row — megabytes per client.
 
-- The search index holds an id and a lower-cased name per entry, built at every
-  cold start and copied to an isolate per query. At 500k that pass is itself a
-  visible cold-start stall.
-- It is in-memory, so it is re-derived every launch: at 50k one transaction
-  commits in ~320 ms, at 500k it is ~3 s of blocked startup.
-- Updates arrive as JSON deltas applied row by row — megabytes per client.
-
-**What we would use instead:**
-
-1. **SQLite FTS5 with a trigram tokenizer**, queried in-process. This deletes
-   the in-memory index: already on disk, built incrementally, shared with
-   storage. Biggest single effect, and the right default past ~50k.
-2. **Partitioned datasets** by region and species, so a device syncs only what
-   it needs.
-3. **Binary changesets** via the SQLite session extension, already linked.
-4. **A recently-used cache**, so the 50–200 drugs a clinic actually reaches for
-   never need a network round trip.
+**What we would use instead:** SQLite FTS5 with a trigram tokenizer, queried
+in-process — deletes the in-memory index, already on disk, built incrementally.
+Partitioned datasets by region and species, so a device syncs only what it
+needs. Binary changesets via the SQLite session extension. A recently-used
+cache, so the 50–200 drugs a clinic reaches for never need a round trip.
 
 Tuned for a formulary a clinic can hold in memory: right up to ~50,000 entries,
 wrong well before 500,000.

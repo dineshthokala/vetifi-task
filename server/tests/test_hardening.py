@@ -79,6 +79,23 @@ def test_duplicate_ids_in_one_publish_rejected(client):
 
 
 # ---------------------------------------------------------------------------
+# Non-standard JSON constants
+# ---------------------------------------------------------------------------
+
+def test_publish_rejects_nan_token_at_the_door(client):
+    """NaN cannot survive the round trip to a client (Dart's jsonDecode
+    rejects the token), so it is refused during parsing rather than left for
+    per-field validation."""
+    raw = (
+        '{"schema_version": 2, "dataset_version": "v15", "base_version": "v14",'
+        ' "upserts": [{"id": "d001", "name": "N", "concentration": "10 mg/mL",'
+        ' "route": "IV", "doses": {"dog": {"min": NaN, "max": 2, "unit": "mg/kg"}}}]}'
+    )
+    res = client.post("/v1/admin/datasets", headers=H, content=raw)
+    assert res.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # Withdraw conflicts
 # ---------------------------------------------------------------------------
 
@@ -100,6 +117,16 @@ def test_withdraw_empty_reason_rejected(client):
     res = client.post("/v1/admin/withdraw", headers=H,
                       json={"drug_id": "d001", "reason": "   "})
     assert res.status_code == 400
+
+
+def test_withdraw_missing_reason_rejected(client):
+    """The brief requires a reason. The server used to invent one
+    ("Withdrawn by regulatory authority"), presenting an operator's silence
+    as a regulator's statement."""
+    res = client.post("/v1/admin/withdraw", headers=H,
+                      json={"drug_id": "d001"})
+    assert res.status_code == 400
+    assert "reason" in res.json()["detail"].lower()
 
 
 def test_rewithdrawing_already_withdrawn_is_409(client):
@@ -211,6 +238,37 @@ def test_calc_logs_rejects_inverted_ranges(client):
     ]})
     assert res.status_code == 200
     assert res.json()["rejected"] == 1
+
+
+def test_calc_logs_duplicate_id_within_one_batch_is_not_500(client):
+    """With autoflush off, the per-row duplicate check cannot see a pending
+    row from the same batch, so the commit used to die as a 500 for the whole
+    batch. The second occurrence now counts as a duplicate up front."""
+    res = client.post("/v1/calc_logs", json={"logs": [
+        {"calc_id": "dup-1", "drug_id": "d001", "species": "dog",
+         "weight_kg": 10, "weight_entered": 10},
+        {"calc_id": "dup-1", "drug_id": "d001", "species": "dog",
+         "weight_kg": 10, "weight_entered": 10},
+    ]})
+    assert res.status_code == 200
+    assert res.json()["inserted"] == 1
+    assert res.json()["duplicates"] == 1
+
+
+def test_calc_logs_reports_rejected_ids(client):
+    """The client needs the ids it must retire: a rejected row that is never
+    identified is resent forever and blocks the whole upload queue."""
+    res = client.post("/v1/calc_logs", json={"logs": [
+        {"calc_id": "bad-1", "drug_id": "d001", "species": "dog",
+         "weight_kg": -5, "weight_entered": 10},
+        {"calc_id": "ok-1", "drug_id": "d001", "species": "dog",
+         "weight_kg": 10, "weight_entered": 10},
+    ]})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["rejected"] == 1
+    assert body["rejected_ids"] == ["bad-1"]
+    assert body["inserted"] == 1
 
 
 def test_calc_logs_truncates_oversized_batch(client):

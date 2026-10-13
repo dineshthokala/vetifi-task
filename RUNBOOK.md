@@ -310,6 +310,39 @@ and relaunch.
 
 ---
 
+## 7. Measuring search latency on your phone (Part B.4)
+
+Do this on a real midrange Android phone, not the emulator. Debug builds carry
+a per-query timer (compiled out of release, so it cannot affect the shipped
+build): every completed search prints a `vetifi_search` line with
+keystroke-to-results milliseconds, covering the isolate hop and the SQLite
+re-hydration of the result rows.
+
+```bash
+cd app
+flutter run                       # debug build on your phone via USB
+adb logcat -s flutter | Select-String "vetifi_search"
+```
+
+Then type at least these queries, pausing between keystrokes so each is a
+separate search: an exact name (`meloquin`), a prefix (`melox`), a substring
+(`cillin`), a typo (`benzaprl`), and a no-match string (`zzzqqq`). Collect ~30
+lines across the set. Report:
+
+- **typical:** the median of the collected lines
+- **worst:** the maximum, with the query that produced it
+- **method:** debug build on `<phone model>`, timer from keystroke debounce
+  fire to results applied, as printed by the app itself
+
+Two honest caveats for the write-up: a debug build is slower than release (JIT,
+asserts, no tree-shaking), so these figures overstate release latency; and the
+timer starts when the 120 ms debounce fires, so it excludes the debounce
+itself — matching how the desktop benchmark in `test/search_test.dart` is
+defined. Put the three numbers in the README's performance section, replacing
+the "not yet measured" paragraph.
+
+---
+
 ## Further reading
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — how every runtime path works

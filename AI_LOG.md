@@ -191,7 +191,30 @@ a 30 ms → 4.7 ms change is more informative than the 4.7 ms.
 
 ---
 
-## 4. What we did not do with AI
+## 4. A night-before-submission review pass (13 Oct 2026)
+
+An external gap review (`vetifi-gap-review.md`, kept in the repo) listed
+validator drift, a missing withdraw reason, over-long Part F answers, and an
+undisclosed signing-key gap, among other items. AI agents were used to verify
+every claim against the code before touching anything: two parallel
+investigations (server-side and app-side) confirmed nearly all of them, and
+refuted one — the claim that the app sends `If-None-Match` (it never does; it
+relies on the `current == latest` path).
+
+The review-driven changes: NaN/Infinity/bool rejection and duplicate-species
+and empty-dose checks on both sides with contract tests, a required withdraw
+reason, `rejected_ids` retiring refused log rows, `gen_*` preservation across
+snapshots, an ETag keyed on both versions, in-batch duplicate log handling,
+removal of dev-server URL probing, a debug-only search timer for the on-device
+measurement, and Part F answers trimmed to under 200 words each.
+
+One review recommendation was deliberately **not** taken: rejecting `"1,200"`
+as ambiguous. The brief specifies comma-as-decimal, an existing test pins
+`parseWeight('1,200') == 1.2`, and the convention is documented in BREAK_IT.
+The reviewer's fix would have broken a brief requirement to satisfy a
+style preference.
+
+## 5. What we did not do with AI
 
 - **No AI-generated code was accepted without being read.** Every clinical
   threshold, every refusal message, and every unit conversion in

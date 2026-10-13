@@ -38,6 +38,14 @@ Two columns deserve attention:
 | 20 | **Calculation depends on connectivity** | The same input gives different answers on different days | `DoseCalculator` is a pure function; a test asserts it imports nothing that can reach the network | `update_security_test.dart` → "DoseCalculator imports nothing that can reach the network" |
 | 21 | **A published version silently edited** | A corrected dose is changed after clinicians have acted on it | No PUT/PATCH/DELETE route exists; a new version can only be an INSERT. A publish from a stale base is a 409, not a silent fork | `test_immutability.py` → "no endpoint can modify a published version", "a stale base is rejected rather than forking" |
 | 22 | **Re-uploaded log overwrites the original** | The audit trail stops being trustworthy | `calc_id` is the primary key and duplicates are counted, never replaced | `test_immutability.py` → "calculation logs are append-only too" |
+| 23 | **NaN / Infinity / boolean dose numbers published** | Python parses the tokens; Dart rejects them, so no client could ever apply the version — and versions are immutable | The validator requires finite non-boolean numbers; the publish endpoint rejects the raw tokens during parsing; the client flags non-finite ranges | `test_contract.py` → "rejects_nan_and_infinity", "rejects_bool_max_total_mg"; `test_hardening.py` → "rejects_nan_token_at_the_door" |
+| 24 | **Two species keys normalising to one** (`"Dog"` and `"dog"`) | The last one silently wins on the client | Refused at publish time; flagged as a validation error on datasets that predate the check | `test_contract.py` → "rejects_duplicate_species_after_normalisation"; `dose_calculator_test.dart` → "flags duplicate species keys after normalisation" |
+| 25 | **Drug with no usable dose published** (`doses: {}` or all null) | Publishes as permanently uncalculable | Refused at publish time; surfaced as a global data error on the client | `test_contract.py` → "rejects_empty_and_all_null_doses"; `dose_calculator_test.dart` → "flags a drug with no usable dose data" |
+| 26 | **Impossible or client-unreadable concentration** (`"1000%"`, non-ASCII digits) | A 100× scaling error, or a string the server accepts but no client can parse | Percentages above 100 refused; digit classes ASCII-only on both sides so the two accept exactly the same strings | `test_contract.py` → "rejects_impossible_percentage", "rejects_non_ascii_digits_in_concentration"; `dose_calculator_test.dart` → "rejects percentages above 100", "rejects non-ASCII digits" |
+| 27 | **Withdrawal published with no reason** | The clinician cannot tell a recall from a deprecation at the refusal moment | `reason` is required (400 if missing or blank); nothing is fabricated server-side | `test_hardening.py` → "withdraw_missing_reason_rejected", "withdraw_empty_reason_rejected" |
+| 28 | **One bad log row blocks the whole upload queue** | A single rejected row is resent forever; nothing behind it uploads | The server names refused ids (`rejected_ids`); the client retires them instead of resending | `test_hardening.py` → "reports_rejected_ids", "duplicate_id_within_one_batch_is_not_500" |
+| 29 | **Full snapshot deletes the 50,000 generated search entries** | The catalogue silently shrinks to ~10 drugs after any snapshot fallback | Snapshot replace exempts `gen_*` rows: the snapshot is authoritative for server-managed rows only | `atomicity_test.dart` → "generated rows survive a snapshot that omits them" |
+| 30 | **Mistyped field in an update crashes parsing** | A `TypeError` escapes and is misreported as "working offline" | `Drug.fromJson` never throws on JSON-shaped input; the parse loop returns `malformed` instead | `dose_calculator_test.dart` → "never throws on mistyped scalars", "treats a boolean max_total_mg as a data error" |
 
 ---
 
@@ -136,11 +144,52 @@ app release, and the users least able to install one are the ones offline.
 Fully analysed in DECISIONS.md question 5, including the revocation list we
 would build first.
 
+Worse than the recovery problem is the residency problem: the private key is
+committed at `server/keys/private.hex`, copied into the Docker image, and used
+to sign at request time. Anyone who reads the repo or controls the server host
+can mint correctly-signed lethal doses that every installed app accepts.
+Signature verification covers the network path; it does nothing against host
+compromise.
+
 **Would we release with this unfixed? Not for production.** For this
 assignment, yes, because the submission demonstrates the mechanism correctly
 and the gap is documented rather than hidden.
 
-### 3.5 There is no rate limiting or authentication on `/v1/calc_logs`
+### 3.5 Weight plausibility is not species-specific
+
+One advisory band (1–60 kg) covers both species with a 1500 kg hard limit, so
+a "40 kg cat" or "500 kg dog" is accepted with at most an advisory. Impossible
+values per species should be hard refusals, but the bands need species-specific
+clinical sign-off we do not have, and inventing them in an evening risks
+refusing a real patient.
+
+*What we would do:* per-species hard limits reviewed against formulary data,
+with the advisory bands kept where they are.
+
+### 3.6 Dose and concentration plausibility has no ceiling
+
+Percentages above 100% are refused and digit classes match across sides, but
+there is no upper bound on mg/mL concentrations or mg/kg doses — `1e308 mg/kg`
+publishes. A ceiling needs a pharmacological basis per drug class, not a
+constant.
+
+### 3.7 Idempotency-key lookup races the row lock
+
+The idempotency check runs before the publish lock, so a concurrent retry with
+the same key can take a 409 instead of the original result, and the replay
+shape differs from the original (200 `already_published` versus 201). Same key
+with a different body silently returns the old result. Fixing it means hashing
+the body into the key and holding the lock across the check — correct, but a
+larger change than tonight allows, and the failure mode is a retryable error,
+not a wrong dose.
+
+### 3.8 `X-Force-Chaos` works without `CHAOS=1`
+
+Any caller can force a tampered or error response for their own request. The
+blast radius is one response to the caller, and the demo depends on the header,
+so this stays as a documented property rather than a fixed one.
+
+### 3.9 There is no rate limiting or authentication on `/v1/calc_logs`
 
 Deliberate: the app may be in the field with no credentials, and the data is
 not clinically authoritative. Records are treated as untrusted — every field is
@@ -160,6 +209,8 @@ proxy with a request cap.
 | Two drugs share the name "Meloquin" (`d004`, `d005`) | This is the dataset's problem, not ours. We surface route and concentration on every row rather than silently deduplicating, because picking one of two real formulations on the clinician's behalf is not our call. |
 | `"1,200"` parses as 1.2, not 1200 | The brief specifies comma-as-decimal. A user meaning twelve hundred types `1200` or `1200,0`. |
 | A delta that omits a drug does not delete it | Only a *full snapshot* is treated as authoritative. Omitting a row from a delta is ambiguous, and treating it as a delete would turn one truncated delta into mass unavailability. |
+| Upserting a withdrawn drug reinstates it, with no separate "reinstate" operation | Withdrawal is a flag on the row, not a tombstone: the newest write wins. An explicit reinstatement would be clearer, but the current rule is total (last write in version order decides) and tested. |
+| `docker compose` publishes Postgres on 5432 with a default password | Local-demo convenience. A deployment binds it to localhost or removes the mapping; the password is overridable via `POSTGRES_PASSWORD`. |
 | Release builds permit cleartext HTTP only to loopback | Signing protects integrity, not confidentiality. See `network_security_config.xml`. |
 
 ---
@@ -169,6 +220,10 @@ proxy with a request cap.
 - **No video.** The brief asks for up to 5 minutes demonstrating airplane mode,
   then a chaos-mode refusal. Not produced; the scripted equivalent is the manual
   procedure in section 2.
+- **Search latency not measured on a physical device.** The brief asks for
+  typical and worst keystroke-to-results time on a real midrange phone plus the
+  method. Current numbers come from a Dart benchmark on a development machine.
+  Measuring on-device is a user-side task; the method is in the README.
 - **Tests run against SQLite, not PostgreSQL.** Both are real databases and the
   SQL is portable, but the concurrency test is more meaningful under
   PostgreSQL's row-level locking than under SQLite's file lock.

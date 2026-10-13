@@ -180,6 +180,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final indexData = _indexData;
     if (indexData == null) return;
 
+    // Debug-only keystroke-to-results timer for the Part B on-device
+    // measurement (see RUNBOOK). Compiled out of release builds, so it
+    // cannot affect shipped behaviour or performance.
+    final sw = Stopwatch()..start();
     final ticket = ++_searchTicket;
 
     List<Map<String, dynamic>> rawHits;
@@ -207,6 +211,12 @@ class _HomeScreenState extends State<HomeScreen> {
       _results = drugs;
       _searching = false;
     });
+    if (kDebugMode) {
+      debugPrint(
+        'vetifi_search ms=${(sw.elapsedMicroseconds / 1000).toStringAsFixed(2)} '
+        'query="$query" hits=${drugs.length}',
+      );
+    }
   }
 
   void _openCalculator(Drug drug) {

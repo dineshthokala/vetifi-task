@@ -31,11 +31,14 @@ ParsedConcentration? parseConcentration(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) return null;
 
-  // Try percentage format: "10%" means 10 g per 100 mL = 100 mg/mL
+  // Try percentage format: "10%" means 10 g per 100 mL = 100 mg/mL.
+  // Above 100% w/v is physically impossible and always a data-entry error.
+  // (Dart \d is ASCII-only, matching the server's ASCII-only patterns, so a
+  // string with Unicode digits fails here exactly as it fails there.)
   final pctMatch = RegExp(r'^(\d+\.?\d*)\s*%$').firstMatch(trimmed);
   if (pctMatch != null) {
     final pct = double.tryParse(pctMatch.group(1)!);
-    if (pct == null || pct <= 0) return null;
+    if (pct == null || pct <= 0 || pct > 100) return null;
     final mgPerMl = pct * 10; // 1% w/v = 10 mg/mL
     return ParsedConcentration(mgPerMl: mgPerMl, original: trimmed);
   }
@@ -132,6 +135,11 @@ class DoseRange {
       return 'Unsupported dose unit "$unit" '
           '(expected ${kSupportedDoseUnits.join(' or ')})';
     }
+    // NaN passes every comparison (NaN <= 0 and NaN > max are both false),
+    // so it must be rejected explicitly rather than by the range checks.
+    if (!min.isFinite || !max.isFinite) {
+      return 'Dose values must be finite numbers';
+    }
     if (min <= 0 || max <= 0) return 'Dose values must be positive';
     if (min > max) return 'Minimum dose ($min) exceeds maximum dose ($max)';
     return null;
@@ -166,6 +174,9 @@ class CriDose {
     if (!kSupportedCriUnits.contains(unit)) {
       return 'Unsupported CRI unit "$unit" '
           '(expected ${kSupportedCriUnits.join(' or ')})';
+    }
+    if (!min.isFinite || !max.isFinite) {
+      return 'CRI dose values must be finite numbers';
     }
     if (min <= 0 || max <= 0) return 'CRI dose values must be positive';
     if (min > max) {
@@ -274,18 +285,37 @@ class Drug {
   }
 
   /// Parse a drug entry from a dataset JSON map.
+  ///
+  /// Total: mistyped scalars become validation errors, never throws. The
+  /// update path treats an unreadable entry as a malformed payload, but the
+  /// bundled base dataset goes through here too, so a throw would be a crash
+  /// on launch rather than a refused update.
   factory Drug.fromJson(Map<String, dynamic> json) {
     final List<String> errors = [];
 
-    final id = json['id'] as String? ?? '';
-    final rawName = json['name'] as String? ?? '';
+    // `as String?` throws on a non-string (e.g. an int id), turning a data
+    // problem into a crash. Read defensively and report instead.
+    final id = json['id'] is String ? json['id'] as String : '';
+    final rawName = json['name'] is String ? json['name'] as String : '';
     final name = rawName.trim();
-    final concentrationRaw = json['concentration'] as String? ?? '';
+    final concentrationRaw =
+        json['concentration'] is String ? json['concentration'] as String : '';
     final concentration = parseConcentration(concentrationRaw);
-    final route = json['route'] as String? ?? '';
-    final maxTotalMg = json['max_total_mg'] != null
-        ? (json['max_total_mg'] as num).toDouble()
-        : null;
+    final route = json['route'] is String ? json['route'] as String : '';
+
+    double? maxTotalMg;
+    final maxTotalRaw = json['max_total_mg'];
+    if (maxTotalRaw != null) {
+      // `is num` excludes bool: max_total_mg=true would otherwise throw here
+      // (or worse, publish as 1 mg on a Python server that accepts bools).
+      final maxTotalValue =
+          maxTotalRaw is num ? maxTotalRaw.toDouble() : double.nan;
+      if (maxTotalValue.isFinite && maxTotalValue > 0) {
+        maxTotalMg = maxTotalValue;
+      } else {
+        errors.add('max_total_mg must be a positive finite number');
+      }
+    }
 
     if (id.isEmpty) errors.add('Missing drug ID');
     if (name.isEmpty) errors.add('Missing drug name');
@@ -299,12 +329,21 @@ class Drug {
 
     // Parse standard doses with species normalisation
     final Map<String, DoseRange> doses = {};
+    final seenDoseSpecies = <String>{};
     if (json['doses'] is Map<String, dynamic>) {
       final dosesMap = json['doses'] as Map<String, dynamic>;
       for (final entry in dosesMap.entries) {
         final normSpecies = normaliseSpecies(entry.key);
         if (normSpecies == null) continue;
         if (entry.value == null) continue; // Explicitly null species dose
+        // "Dog" and "dog" would overwrite each other silently. The server
+        // refuses this at publish time; flag it here too for datasets that
+        // predate the check.
+        if (!seenDoseSpecies.add(normSpecies)) {
+          errors.add(
+            'Duplicate dose entry for "$normSpecies" ("${entry.key}")',
+          );
+        }
         if (entry.value is Map<String, dynamic>) {
           try {
             doses[normSpecies] = DoseRange.fromJson(
@@ -319,12 +358,18 @@ class Drug {
 
     // Parse CRI doses
     final Map<String, CriDose> criDoses = {};
+    final seenCriSpecies = <String>{};
     if (json['cri'] is Map<String, dynamic>) {
       final criMap = json['cri'] as Map<String, dynamic>;
       for (final entry in criMap.entries) {
         final normSpecies = normaliseSpecies(entry.key);
         if (normSpecies == null) continue;
         if (entry.value == null) continue;
+        if (!seenCriSpecies.add(normSpecies)) {
+          errors.add(
+            'Duplicate CRI entry for "$normSpecies" ("${entry.key}")',
+          );
+        }
         if (entry.value is Map<String, dynamic>) {
           try {
             criDoses[normSpecies] = CriDose.fromJson(
@@ -337,8 +382,16 @@ class Drug {
       }
     }
 
-    final isWithdrawn = json['is_withdrawn'] as bool? ?? false;
-    final withdrawnReason = json['withdrawn_reason'] as String?;
+    if (doses.isEmpty && criDoses.isEmpty) {
+      errors.add('No usable dose data: "doses" and "cri" are both empty');
+    }
+
+    final isWithdrawn = json['is_withdrawn'] is bool
+        ? json['is_withdrawn'] as bool
+        : false;
+    final withdrawnReason = json['withdrawn_reason'] is String
+        ? json['withdrawn_reason'] as String
+        : null;
 
     return Drug(
       id: id,

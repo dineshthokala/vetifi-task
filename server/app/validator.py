@@ -10,6 +10,7 @@ app would accept something the server considers valid but cannot compute with
 failure rather than a production surprise.
 """
 
+import math
 import re
 from typing import Any
 
@@ -36,7 +37,15 @@ class ValidationError(Exception):
 def parse_concentration(raw: str) -> float | None:
     """
     Parses concentration strings like '50 mg/mL' or '10%' into mg/mL.
-    Returns float mg/mL if valid (> 0), None otherwise.
+    Returns float mg/mL if valid, None otherwise.
+
+    The digit classes are ASCII-only on purpose: the app's Dart parser uses
+    ASCII `\\d` and `double.tryParse`, so a string Python would accept with
+    Unicode digits (e.g. Arabic-Indic) is one the app cannot parse. Accepting
+    it here would publish a drug no client can calculate with.
+
+    Percentages above 100 are physically impossible (>100% w/v) and always a
+    data-entry error, so they are rejected rather than scaled into mg/mL.
     """
     if not isinstance(raw, str):
         return None
@@ -45,18 +54,18 @@ def parse_concentration(raw: str) -> float | None:
         return None
 
     # Percentage: 10% = 10g / 100mL = 100 mg/mL
-    pct_match = re.match(r"^(\d+\.?\d*)\s*%$", trimmed)
+    pct_match = re.match(r"^(\d+\.?\d*)\s*%$", trimmed, re.ASCII)
     if pct_match:
         try:
             val = float(pct_match.group(1))
-            if val > 0:
+            if 0 < val <= 100:
                 return val * 10.0
         except ValueError:
             return None
         return None
 
     # mg/mL format
-    mg_match = re.match(r"^(\d+\.?\d*)\s*mg\s*/\s*m[lL]$", trimmed, re.IGNORECASE)
+    mg_match = re.match(r"^(\d+\.?\d*)\s*mg\s*/\s*m[lL]$", trimmed, re.IGNORECASE | re.ASCII)
     if mg_match:
         try:
             val = float(mg_match.group(1))
@@ -67,6 +76,23 @@ def parse_concentration(raw: str) -> float | None:
         return None
 
     return None
+
+
+def _is_valid_number(value: Any) -> bool:
+    """
+    A JSON number the app can actually consume: a real, finite number.
+
+    Bools are excluded even though Python subclasses bool from int: True would
+    otherwise pass as 1 mg/kg. NaN and Infinity are excluded because Python's
+    json module parses the non-standard literals while Dart's jsonDecode
+    rejects them, so accepting them here publishes a version no client can
+    apply -- and published versions are immutable.
+    """
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
 
 
 def normalize_species(raw: str) -> str:
@@ -133,7 +159,8 @@ def validate_drug_entry(drug: dict[str, Any]) -> list[dict[str, str]]:
             errors.append({
                 "drug_id": drug_id,
                 "field": "concentration",
-                "message": f"Invalid concentration '{raw_conc}': must be format 'X mg/mL' or 'X%' with value > 0"
+                "message": f"Invalid concentration '{raw_conc}': must be 'X mg/mL' or 'X%' "
+                           f"with ASCII digits, value > 0 and percentage <= 100"
             })
 
     # Route validation
@@ -144,11 +171,11 @@ def validate_drug_entry(drug: dict[str, Any]) -> list[dict[str, str]]:
     # Max total mg validation (optional)
     if "max_total_mg" in drug and drug["max_total_mg"] is not None:
         max_total = drug["max_total_mg"]
-        if not isinstance(max_total, (int, float)) or max_total <= 0:
+        if not _is_valid_number(max_total) or max_total <= 0:
             errors.append({
                 "drug_id": drug_id,
                 "field": "max_total_mg",
-                "message": f"max_total_mg must be a positive number, got {max_total}"
+                "message": f"max_total_mg must be a positive finite number, got {max_total}"
             })
 
     doses = drug.get("doses")
@@ -163,12 +190,26 @@ def validate_drug_entry(drug: dict[str, Any]) -> list[dict[str, str]]:
             errors.append({"drug_id": drug_id, "field": "doses", "message": "'doses' must be a JSON object"})
         else:
             has_at_least_one_dose = False
+            seen_species: set[str] = set()
             for species_key, dose_spec in doses.items():
                 if dose_spec is None:
                     continue  # e.g., cat: null is acceptable (meaning no dose for this species)
 
                 has_at_least_one_dose = True
                 norm_species = normalize_species(species_key)
+
+                # Two keys normalising to one species ("Dog" and "dog", "dog"
+                # and "canine") would silently overwrite each other on the
+                # client, which keys by normalised species. Refuse the
+                # ambiguity at publish time instead of letting the last one win.
+                if norm_species in seen_species:
+                    errors.append({
+                        "drug_id": drug_id,
+                        "field": f"doses.{species_key}",
+                        "message": f"Species '{species_key}' normalises to '{norm_species}', "
+                                   f"which is already defined for this drug"
+                    })
+                seen_species.add(norm_species)
 
                 if not isinstance(dose_spec, dict):
                     errors.append({
@@ -190,24 +231,22 @@ def validate_drug_entry(drug: dict[str, Any]) -> list[dict[str, str]]:
                 max_val = dose_spec.get("max")
                 unit = canonical_unit(dose_spec.get("unit"))
 
-                if min_val is None or not isinstance(min_val, (int, float)) or isinstance(min_val, bool) or min_val <= 0:
+                if min_val is None or not _is_valid_number(min_val) or min_val <= 0:
                     errors.append({
                         "drug_id": drug_id,
                         "field": f"doses.{species_key}.min",
-                        "message": f"Minimum dose for {species_key} must be > 0"
+                        "message": f"Minimum dose for {species_key} must be a positive finite number"
                     })
-                if max_val is None or not isinstance(max_val, (int, float)) or isinstance(max_val, bool) or max_val <= 0:
+                if max_val is None or not _is_valid_number(max_val) or max_val <= 0:
                     errors.append({
                         "drug_id": drug_id,
                         "field": f"doses.{species_key}.max",
-                        "message": f"Maximum dose for {species_key} must be > 0"
+                        "message": f"Maximum dose for {species_key} must be a positive finite number"
                     })
 
                 if (
-                    isinstance(min_val, (int, float))
-                    and not isinstance(min_val, bool)
-                    and isinstance(max_val, (int, float))
-                    and not isinstance(max_val, bool)
+                    _is_valid_number(min_val)
+                    and _is_valid_number(max_val)
                     and min_val > max_val
                 ):
                     errors.append({
@@ -226,14 +265,35 @@ def validate_drug_entry(drug: dict[str, Any]) -> list[dict[str, str]]:
                                    f"unit cannot be calculated safely.",
                     })
 
+            # 'doses' present but empty, or every entry null: the drug carries
+            # no usable dose and would publish as uncalculable.
+            if not has_at_least_one_dose:
+                errors.append({
+                    "drug_id": drug_id,
+                    "field": "doses",
+                    "message": "'doses' must contain at least one usable species entry (use null only for species with no dose)",
+                })
+
     # Validate CRI doses
     if cri is not None:
         if not isinstance(cri, dict):
             errors.append({"drug_id": drug_id, "field": "cri", "message": "'cri' must be a JSON object"})
         else:
+            has_at_least_one_cri = False
+            seen_cri_species: set[str] = set()
             for species_key, cri_spec in cri.items():
                 if cri_spec is None:
                     continue
+                has_at_least_one_cri = True
+                norm_species = normalize_species(species_key)
+                if norm_species in seen_cri_species:
+                    errors.append({
+                        "drug_id": drug_id,
+                        "field": f"cri.{species_key}",
+                        "message": f"Species '{species_key}' normalises to '{norm_species}', "
+                                   f"which is already defined for this drug"
+                    })
+                seen_cri_species.add(norm_species)
                 if not isinstance(cri_spec, dict):
                     errors.append({
                         "drug_id": drug_id,
@@ -254,23 +314,21 @@ def validate_drug_entry(drug: dict[str, Any]) -> list[dict[str, str]]:
                 max_val = cri_spec.get("max")
                 unit = canonical_unit(cri_spec.get("unit"))
 
-                if min_val is None or not isinstance(min_val, (int, float)) or isinstance(min_val, bool) or min_val <= 0:
+                if min_val is None or not _is_valid_number(min_val) or min_val <= 0:
                     errors.append({
                         "drug_id": drug_id,
                         "field": f"cri.{species_key}.min",
-                        "message": f"CRI min for {species_key} must be > 0"
+                        "message": f"CRI min for {species_key} must be a positive finite number"
                     })
-                if max_val is None or not isinstance(max_val, (int, float)) or isinstance(max_val, bool) or max_val <= 0:
+                if max_val is None or not _is_valid_number(max_val) or max_val <= 0:
                     errors.append({
                         "drug_id": drug_id,
                         "field": f"cri.{species_key}.max",
-                        "message": f"CRI max for {species_key} must be > 0"
+                        "message": f"CRI max for {species_key} must be a positive finite number"
                     })
                 if (
-                    isinstance(min_val, (int, float))
-                    and not isinstance(min_val, bool)
-                    and isinstance(max_val, (int, float))
-                    and not isinstance(max_val, bool)
+                    _is_valid_number(min_val)
+                    and _is_valid_number(max_val)
                     and min_val > max_val
                 ):
                     errors.append({
@@ -286,6 +344,13 @@ def validate_drug_entry(drug: dict[str, Any]) -> list[dict[str, str]]:
                                    f"{', '.join(SUPPORTED_CRI_UNITS)}, got "
                                    f"{cri_spec.get('unit')!r}",
                     })
+
+            if not has_at_least_one_cri:
+                errors.append({
+                    "drug_id": drug_id,
+                    "field": "cri",
+                    "message": "'cri' must contain at least one usable species entry",
+                })
 
     return errors
 

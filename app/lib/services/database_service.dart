@@ -530,9 +530,22 @@ class DatabaseService {
 
     await db.transaction((txn) async {
       if (isFullSnapshot) {
-        // The snapshot is the whole truth. Remove anything it does not list,
-        // so withdrawn and deleted drugs do not survive as stale rows.
+        // The snapshot is the whole truth about server-managed rows. Remove
+        // anything it does not list, so withdrawn and deleted drugs do not
+        // survive as stale rows.
+        //
+        // The locally generated Part-B corpus (ids gen_*) is deliberately
+        // exempt: no server snapshot lists those rows, so a naive replace
+        // deletes all 50,000 of them and the catalogue silently shrinks to
+        // the ~10 clinical drugs. They are filler for the search benchmark,
+        // not server data, and replacing them is never what an update means.
         final keepIds = upserts.map((d) => d.id).toList();
+        final genRows = await txn.query(
+          'drugs',
+          columns: ['id'],
+          where: "id LIKE 'gen\\_%' ESCAPE '\\'",
+        );
+        keepIds.addAll([for (final row in genRows) row['id'] as String]);
         if (keepIds.isEmpty) {
           await txn.delete('drugs');
         } else {

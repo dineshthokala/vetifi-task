@@ -165,7 +165,11 @@ def get_manifest(
     if not latest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No dataset versions found")
 
-    etag = f'"{latest.version}"'
+    # The manifest content depends on both ends of the sync: the payload hash,
+    # delta availability and sha all vary with `current`. Keying the ETag on
+    # the latest version alone lets a conditional request from a client on an
+    # older version wrongly match and receive a 304 for content it never saw.
+    etag = f'"{latest.version}:{current}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)
 
@@ -373,9 +377,17 @@ async def publish_dataset(
             )
 
     # 2. Parse request body (handle malformed JSON like update_v18)
+    #
+    # Non-standard NaN/Infinity literals are rejected at the door: Python's
+    # json parses them into floats the validator would otherwise have to catch
+    # one field at a time, and Dart's jsonDecode rejects the tokens outright,
+    # so they could never survive the round trip to a client.
+    def _reject_constant(value: str):
+        raise ValueError(f"Non-standard JSON constant not allowed: {value}")
+
     try:
         raw_body = await request.body()
-        body = json.loads(raw_body.decode("utf-8"))
+        body = json.loads(raw_body.decode("utf-8"), parse_constant=_reject_constant)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -620,13 +632,16 @@ def withdraw_drug(
 
     # A withdrawal with no reason leaves the clinician unable to tell a recall
     # from a deprecation from a data-entry error, which is exactly the
-    # information they need at the moment they refuse to calculate.
-    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+    # information they need at the moment they refuse to calculate. The brief
+    # requires a reason, so it is required here rather than fabricated: a
+    # server-invented reason would present an operator's silence as a
+    # regulator's statement.
+    if not isinstance(reason, str) or not reason.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="'reason' must be a non-empty string when provided",
+            detail="'reason' is required and must be a non-empty string",
         )
-    reason = (reason or "").strip() or "Withdrawn by regulatory authority"
+    reason = reason.strip()
 
     # Idempotency: a retried request returns the original result rather than
     # creating a second, identical version.
@@ -769,6 +784,12 @@ def receive_calc_logs(body: dict[str, Any], db: Session = Depends(get_db)):
     inserted = 0
     duplicates = 0
     rejected = 0
+    # Ids the server refused, returned so the client can retire them instead
+    # of resending the same bad row forever. Rows rejected before an id is
+    # known (not an object, blank calc_id) are counted but have nothing to
+    # report, so the list can be shorter than the count.
+    rejected_ids: list[str] = []
+    seen_in_batch: set[str] = set()
 
     def as_float(value: Any, *, low: float, high: float, default: float) -> float | None:
         if value is None:
@@ -794,6 +815,15 @@ def receive_calc_logs(body: dict[str, Any], db: Session = Depends(get_db)):
             continue
         calc_id = calc_id.strip()[:64]
 
+        # A duplicate inside one batch never reaches the per-row database
+        # check below (autoflush is off, so pending rows are invisible to it)
+        # and used to die as a 500 on commit for the whole batch. Count it as
+        # a duplicate up front instead.
+        if calc_id in seen_in_batch:
+            duplicates += 1
+            continue
+        seen_in_batch.add(calc_id)
+
         # A log must identify a real drug and carry a positive weight and a
         # non-negative dose; anything else is corrupt or hostile.
         drug_id = item.get("drug_id")
@@ -814,13 +844,16 @@ def receive_calc_logs(body: dict[str, Any], db: Session = Depends(get_db)):
             or weight_entered <= 0
         ):
             rejected += 1
+            rejected_ids.append(calc_id)
             continue
 
         if dose_max_mg and dose_min_mg > dose_max_mg:
             rejected += 1
+            rejected_ids.append(calc_id)
             continue
         if volume_max_ml and volume_min_ml > volume_max_ml:
             rejected += 1
+            rejected_ids.append(calc_id)
             continue
 
         existing = db.query(CalculationLog).filter_by(calc_id=calc_id).first()
@@ -862,5 +895,6 @@ def receive_calc_logs(body: dict[str, Any], db: Session = Depends(get_db)):
         "inserted": inserted,
         "duplicates": duplicates,
         "rejected": rejected,
+        "rejected_ids": rejected_ids,
         "truncated": truncated,
     }

@@ -70,11 +70,25 @@ The dataset server defaults to `http://10.0.2.2:8000`, which is the host machine
 as seen from an Android emulator. For a physical device on the same LAN, change
 the base URL in **Settings** (or pass a host the app can reach).
 
+**Reviewers: use an emulator or `adb reverse`.** Release builds permit cleartext
+HTTP only to loopback (`10.0.2.2`, `127.0.0.1`, `localhost`), so on a physical
+phone the app reaches the server via `adb reverse tcp:8000 tcp:8000` with the
+base URL set to `http://127.0.0.1:8000`, or via an HTTPS deployment. A LAN IP
+works only in debug builds. See `network_security_config.xml`.
+
+### Release APK
+
+```bash
+cd app
+flutter build apk --release
+# build/app/outputs/flutter-apk/app-release.apk
+```
+
 ### Tests
 
 ```bash
-cd app     && flutter test                            # 128 tests
-cd server  && python -m pytest server/tests -q        # 68 tests
+cd app     && flutter test                            # 135 tests
+cd server  && python -m pytest server/tests -q        # 78 tests
 ```
 
 `pytest.ini` puts the repository root on `sys.path`, so pytest works from
@@ -221,6 +235,9 @@ leaves unmeasured is the isolate hop and the SQLite re-read of the result rows.
 On a device expect the search itself to be roughly 3–5× slower. **A measurement
 on real hardware is the one piece of Part B we would want to add before
 shipping**, and it is the only Part B requirement we consider outstanding.
+The method is ready: debug builds log per-query timings (`vetifi_search`), and
+RUNBOOK.md section 7 is the exact on-phone protocol — typical, worst, and how
+to report them. Fill the numbers in here when measured.
 
 The first version of this search ran Levenshtein across every row on the UI
 isolate on every keystroke. The benchmark caught it at a **30 ms** worst case
@@ -236,9 +253,12 @@ contradicted.
 ## Notable engineering decisions
 
 **A full snapshot is authoritative; a delta is not.** When the app receives a
-snapshot it deletes rows the snapshot omits. When it receives a delta it does
-not — omitting a row from a delta is ambiguous, and treating it as a delete
-would turn one truncated delta into mass unavailability.
+snapshot it deletes server-managed rows the snapshot omits. When it receives a
+delta it does not — omitting a row from a delta is ambiguous, and treating it
+as a delete would turn one truncated delta into mass unavailability. The
+locally generated 50,000-entry search corpus is exempt from snapshot deletion:
+no server snapshot lists those rows, so replacing them would shrink the
+catalogue to ~10 drugs on every snapshot fallback.
 
 **Withdrawal state round-trips.** An earlier version parsed drug entries without
 reading `is_withdrawn`, so any client that received a full snapshot instead of a
@@ -269,11 +289,11 @@ fixed, and both were invisible to the tests that existed at the time.
   assets/data/       base_dataset_v14.json + generated_50k_drugs.json
   lib/services/      dose_calculator · search_index · update_service ·
                      sync_service · database_service
-  test/              128 tests
+  test/              135 tests
 /server              FastAPI dataset server
   keys/              Signing keypair (private.hex is committed for the demo)
   seed/              v14 base dataset and the v15-v18 publishing test cases
-  tests/             68 tests
+  tests/             78 tests
   Dockerfile, docker-compose.yml, entrypoint.sh
 README.md            This file
 RUNBOOK.md           Setup, running, demo script, troubleshooting
@@ -297,7 +317,7 @@ AI_LOG.md            AI usage, including where it was wrong
   publish, with the reasoning behind each decision.
 - **DECISIONS.md** — the six written questions and the code review. Each answer
   names the test that verifies it.
-- **BREAK_IT.md** — 22 failure modes with defences and test names, the manual
-  atomicity procedure, five unfixed issues, and six deliberate behaviours that
+- **BREAK_IT.md** — 30 failure modes with defences and test names, the manual
+  atomicity procedure, nine unfixed issues, and eight deliberate behaviours that
   look like bugs.
 - **AI_LOG.md** — what AI got wrong here, in detail.

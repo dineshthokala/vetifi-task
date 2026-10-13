@@ -214,6 +214,38 @@ void main() {
     });
   });
 
+  group('A full snapshot preserves the locally generated corpus', () {
+    // No server snapshot lists the gen_* rows, so the replace step must
+    // exempt them explicitly. This runs the same DELETE pattern applyUpdate
+    // uses (snapshot ids plus the gen_* keep-query) against the real engine.
+    test('generated rows survive a snapshot that omits them', () async {
+      await seed(['d001', 'd002', 'gen_00001', 'gen_00002']);
+
+      await db.transaction((txn) async {
+        // keepIds from the snapshot payload...
+        final keepIds = ['d002', 'd003'];
+        // ...plus every locally generated row, exactly as applyUpdate does.
+        final genRows = await txn.query(
+          'drugs',
+          columns: ['id'],
+          where: "id LIKE 'gen\\_%' ESCAPE '\\'",
+        );
+        keepIds.addAll([for (final row in genRows) row['id'] as String]);
+
+        final placeholders = List.filled(keepIds.length, '?').join(',');
+        await txn.rawDelete(
+          'DELETE FROM drugs WHERE id NOT IN ($placeholders)',
+          keepIds,
+        );
+        await txn.insert('drugs',
+            {'id': 'd003', 'name': 'new', 'concentration_mg_ml': 5.0});
+      });
+
+      // d001 (omitted, server-managed) is gone; gen_* rows survive.
+      expect(await ids(), ['d002', 'd003', 'gen_00001', 'gen_00002']);
+    });
+  });
+
   group('Large updates commit as one unit', () {
     test('a 5000 row delta applies atomically', () async {
       await seed(['d001']);

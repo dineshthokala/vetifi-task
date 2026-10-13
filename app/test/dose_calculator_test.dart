@@ -92,6 +92,17 @@ void main() {
       expect(parseConcentration('one hundred'), isNull);
       expect(parseConcentration(''), isNull);
     });
+
+    test('rejects percentages above 100 as physically impossible', () {
+      expect(parseConcentration('1000%'), isNull);
+      expect(parseConcentration('100%')!.mgPerMl, 1000.0);
+    });
+
+    test('rejects non-ASCII digits, matching the server ASCII rule', () {
+      // The server's patterns are ASCII-only so that both sides accept
+      // exactly the same strings.
+      expect(parseConcentration('٥٠ mg/mL'), isNull);
+    });
   });
 
   group('Data quality refusals', () {
@@ -170,6 +181,73 @@ void main() {
       final r = DoseCalculator.calculate(drug: drug, species: 'dog', weightKg: 10);
       expect(r.result, isNull);
       expect(r.error, contains('unit'));
+    });
+
+    test('flags duplicate species keys after normalisation', () {
+      // "Dog" and "dog" would overwrite each other silently. The server
+      // refuses this at publish time; the client flags it for datasets that
+      // predate the check.
+      final drug = drugFrom({
+        'id': 'x3',
+        'name': 'DupSpecies',
+        'concentration': '10 mg/mL',
+        'route': 'IV',
+        'doses': {
+          'Dog': {'min': 1, 'max': 2, 'unit': 'mg/kg'},
+          'dog': {'min': 3, 'max': 4, 'unit': 'mg/kg'},
+        },
+      });
+      expect(
+        drug.validationErrors,
+        contains(contains('Duplicate dose entry')),
+      );
+    });
+
+    test('flags a drug with no usable dose data', () {
+      final drug = drugFrom({
+        'id': 'x4',
+        'name': 'EmptyDoses',
+        'concentration': '10 mg/mL',
+        'route': 'IV',
+        'doses': {'dog': null, 'cat': null},
+      });
+      expect(drug.hasGlobalError, isTrue);
+      final r = DoseCalculator.calculate(drug: drug, species: 'dog', weightKg: 10);
+      expect(r.result, isNull);
+    });
+
+    test('treats a boolean max_total_mg as a data error, not a crash', () {
+      final drug = drugFrom({
+        'id': 'x5',
+        'name': 'BoolCap',
+        'concentration': '10 mg/mL',
+        'route': 'IV',
+        'max_total_mg': true,
+        'doses': {
+          'dog': {'min': 1, 'max': 2, 'unit': 'mg/kg'}
+        },
+      });
+      expect(drug.maxTotalMg, isNull);
+      expect(
+        drug.validationErrors,
+        contains(contains('max_total_mg')),
+      );
+    });
+
+    test('never throws on mistyped scalars', () {
+      // Ints where strings belong used to escape as TypeError and get
+      // misreported as "working offline" by the sync layer.
+      final drug = drugFrom({
+        'id': 42,
+        'name': 'Mistyped',
+        'concentration': '10 mg/mL',
+        'route': 'IV',
+        'doses': {
+          'dog': {'min': 1, 'max': 2, 'unit': 'mg/kg'}
+        },
+      });
+      expect(drug.id, '');
+      expect(drug.validationErrors, contains('Missing drug ID'));
     });
 
     test('refuses mcg/kg/min appearing in a bolus doses block', () {
